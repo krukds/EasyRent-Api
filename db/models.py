@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, \
+    CheckConstraint, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -57,6 +58,9 @@ class ListingModel(Base):
     bathrooms = Column(Integer, nullable=True)
     square = Column(Integer, nullable=False)
     communal = Column(Integer, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
     owner_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     heating_type_id = Column(Integer, ForeignKey("heating_type.id", ondelete="SET NULL"), nullable=True)
     listing_type_id = Column(Integer, ForeignKey("listing_type.id", ondelete="SET NULL"), nullable=True)
@@ -74,6 +78,7 @@ class ListingModel(Base):
     )
 
     owner = relationship("UserModel", backref="listings", foreign_keys="ListingModel.owner_id")
+    images = relationship("ImageModel", back_populates="listing", cascade="all, delete")
 
 
 class ImageModel(Base):
@@ -81,6 +86,9 @@ class ImageModel(Base):
     id = Column(Integer, primary_key=True)
     listing_id = Column(Integer, ForeignKey("listing.id", ondelete="CASCADE"), nullable=False)
     image_url = Column(String, nullable=False)
+
+    listing = relationship("ListingModel", back_populates="images")
+
 
 class SubscriptionModel(Base):
     __tablename__ = "subscription"
@@ -132,7 +140,13 @@ class ReviewModel(Base):
     owner = relationship(
         "UserModel",
         foreign_keys=lambda: [ReviewModel.owner_id],
-        backref="received_reviews"
+        backref="reviews_about_me"
+    )
+
+    user = relationship(
+        "UserModel",
+        foreign_keys=lambda: [ReviewModel.user_id],
+        backref="my_written_reviews"
     )
 
     __table_args__ = (

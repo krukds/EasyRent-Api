@@ -19,7 +19,6 @@ class SignupPayload(BaseModel):
     first_name: str
     last_name: str
     phone: str
-    photo_url: Optional[str] = None
 
 
 class TokenResponse(BaseModel):
@@ -30,6 +29,7 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: str
+    password: str
     first_name: str
     last_name: str
     phone: str
@@ -37,13 +37,14 @@ class UserResponse(BaseModel):
     role: int
     is_active: bool
     is_verified: bool
+    average_rating: Optional[float] = None
 
 
 class UserPayload(BaseModel):
-    email: str
-    password: str
-    first_name: str
-    last_name: str
-    phone: str
+    email: Optional[str] = None
+    password: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
     photo_url: Optional[str] = None
-    role: int
+    role: Optional[int] = None

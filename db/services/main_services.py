@@ -172,7 +172,6 @@ class ListingTagService(BaseService[ListingTagModel]):
     model = ListingTagModel
     session_maker = async_session_maker
 
-
 class ListingTagListingService(BaseService[ListingTagListingModel]):
     model = ListingTagListingModel
     session_maker = async_session_maker

@@ -1,21 +1,27 @@
 import datetime
+import os
+import shutil
+from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Query, joinedload
 from starlette import status
 from starlette.status import HTTP_404_NOT_FOUND
 
 from db import UserModel
+from db.models import ReviewModel
 from db.services import UserService
+from db.services.main_services import ReviewService
 from utils import datetime_now
 from .deps import get_current_active_user
 from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload
-from .utils import create_user_session
+from .utils import create_user_session, build_user_response
 
+UPLOAD_DIR = Path("static/user_photos")
 router = APIRouter(
     prefix="/auth",
     tags=["Authorization"]
@@ -26,8 +32,13 @@ router = APIRouter(
 async def login(
     payload: OAuth2PasswordRequestForm = Depends()
 ) -> TokenResponse:
+    if "@" in payload.username:
+        filter_field = UserModel.email == payload.username
+    else:
+        filter_field = UserModel.phone == payload.username
+
     user = await UserService.select_one(
-        UserModel.email == payload.username,
+        filter_field,
         UserModel.password == payload.password,
     )
 
@@ -48,6 +59,7 @@ async def login(
 async def signup(
         payload: SignupPayload
 ) -> TokenResponse:
+    # Перевірка email
     user = await UserService.select_one(
         UserModel.email == payload.email
     )
@@ -56,20 +68,31 @@ async def signup(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This email is already used"
         )
-    else:
-        try:
-            user = UserModel(
-                **payload.model_dump(),
-                role=1,
-                is_active=True
-            )
-            await UserService.save(user)
 
-        except ValidationError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Incorrect payload data"
-            )
+    # ✅ Перевірка телефону
+    existing_user_by_phone = await UserService.select_one(
+        UserModel.phone == payload.phone
+    )
+    if existing_user_by_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This phone number is already used"
+        )
+
+    try:
+        user = UserModel(
+            **payload.model_dump(),
+            photo_url=None,
+            role=1,
+            is_active=True
+        )
+        await UserService.save(user)
+
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect payload data"
+        )
 
     session = await create_user_session(user.id)
 
@@ -79,12 +102,20 @@ async def signup(
     )
 
 
-@router.get("/me")
-async def get_me(
-        user: UserModel = Depends(get_current_active_user)
-) -> UserResponse:
-    return UserResponse(**user.__dict__)
-
+@router.get("/me", response_model=UserResponse)
+async def get_me(user: UserModel = Depends(get_current_active_user)) -> UserResponse:
+    # 🎯 Отримуємо середній рейтинг як власника
+    avg_rating_query = (
+        select(func.avg(ReviewModel.rating))
+        .where(ReviewModel.user_id  == user.id)
+    )
+    result = await ReviewService.execute(avg_rating_query)
+    average_rating = result[0] if result else None
+    
+    return UserResponse(
+        **user.__dict__,
+        average_rating=round(average_rating, 2) if average_rating else None
+    )
 
 @router.get("/id")
 async def get_user_by_id(
@@ -126,19 +157,23 @@ async def update_user_by_id(
         user_id: int,
         payload: UserPayload
 ) -> UserResponse:
+    # Отримуємо користувача
     user: UserModel = await UserService.select_one(
         UserModel.id == user_id
     )
     if not user:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No user with this id found")
 
+    # Оновлюємо поля, якщо вони були передані
     for key, value in payload.model_dump().items():
-        setattr(user, key, value)
+        if value is not None:  # Перевіряємо, чи передано значення
+            setattr(user, key, value)
+        elif key == 'photo_url' and value is None:  # Якщо передано null для фото
+            setattr(user, key, None)  # Явно обираємо null для фото
 
-    updated_user = await UserService.save(user)
+    await UserService.save(user)
 
-    return UserResponse(**updated_user.__dict__)
-
+    return await build_user_response(user)
 
 @router.get("", response_model=List[UserResponse])
 async def get_all_users(
@@ -173,3 +208,25 @@ async def get_all_users(
     #     )
     #     for user in users
     # ]
+
+
+
+
+
+@router.post("/upload-photo", response_model=UserResponse)
+async def upload_user_photo(
+    file: UploadFile = File(...),
+    user: UserModel = Depends(get_current_active_user)
+):
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
+
+    # Збереження файлу
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Оновлення photo_url користувача
+    user.photo_url = file.filename
+    updated_user = await UserService.save(user)
+
+    return UserResponse(**updated_user.__dict__)

@@ -3,9 +3,10 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import select
 from starlette import status
 
+from auth_app.schemes import UserResponse
 from db.models import ReviewModel, ReviewStatusModel, ReviewTagModel, ReviewTagReviewModel
 from db.services.main_services import ReviewService
-from .schemes import ReviewPayload, ReviewResponse, ReviewDetailResponse
+from .schemes import ReviewPayload, ReviewResponse, ReviewDetailResponse, OwnerResponse
 from typing import List, Optional
 
 router = APIRouter(
@@ -23,19 +24,18 @@ async def get_all_reviews(
         select(ReviewModel)
         .options(
             joinedload(ReviewModel.tags),
-            joinedload(ReviewModel.review_status)
+            joinedload(ReviewModel.review_status),
+            joinedload(ReviewModel.owner),
+            joinedload(ReviewModel.user)
         )
     )
 
-    # 🔍 Додаємо фільтри, якщо параметри передані
     if user_id is not None:
         query = query.where(ReviewModel.user_id == user_id)
     if owner_id is not None:
         query = query.where(ReviewModel.owner_id == owner_id)
 
-    # Уникаємо дублів, бо є joinedload(tags)
     query = query.distinct()
-
     reviews = await ReviewService.execute(query)
 
     return [
@@ -48,10 +48,31 @@ async def get_all_reviews(
             review_status_id=review.review_status_id,
             created_at=review.created_at,
             review_status=review.review_status.name if review.review_status else None,
-            tags=[tag.name for tag in review.tags]
+            tags=[tag.name for tag in review.tags],
+            owner=OwnerResponse(
+                id=review.owner.id,
+                email=review.owner.email,
+                first_name=review.owner.first_name,
+                last_name=review.owner.last_name,
+                phone=review.owner.phone,
+                photo_url=review.owner.photo_url,
+            ) if review.owner else None,
+            user=UserResponse(
+                id=review.user.id,
+                email=review.user.email,
+                password=review.user.password,
+                first_name=review.user.first_name,
+                last_name=review.user.last_name,
+                phone=review.user.phone,
+                photo_url=review.user.photo_url,
+                role=review.user.role,
+                is_active=review.user.is_active,
+                is_verified=review.user.is_verified,
+            ) if review.user else None
         )
         for review in reviews
     ]
+
 @router.get("/{id}", response_model=ReviewResponse)
 async def get_review_by_id(id: int):
     query = (
@@ -84,6 +105,13 @@ async def get_review_by_id(id: int):
 
 @router.post("", response_model=ReviewResponse)
 async def create_review(payload: ReviewPayload):
+    # 🚫 Забороняємо писати відгук самому собі
+    if payload.user_id == payload.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot leave a review for yourself."
+        )
+
     existing_review = await ReviewService.select_one_by_filters(
         ReviewModel.user_id == payload.user_id,
         ReviewModel.owner_id == payload.owner_id

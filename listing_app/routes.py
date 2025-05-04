@@ -1,12 +1,20 @@
-from fastapi import APIRouter, HTTPException, Query
+from datetime import datetime
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File
 from sqlalchemy import select, update, insert, func
 from sqlalchemy.orm import joinedload
 
-from db.models import ListingModel, ListingTagListingModel, ReviewModel
+from db.models import ListingModel, ListingTagListingModel, ReviewModel, ImageModel
 from db.services.main_services import ListingService, ReviewService, UserService
 from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse
 from typing import List, Optional
+from sqlalchemy.orm import joinedload
 
+
+UPLOAD_DIR = Path("static/listing_photos")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 router = APIRouter(
     prefix="/listing",
     tags=["Listings"]
@@ -34,7 +42,7 @@ async def get_all_listings(
     listing_type_id: Optional[int] = Query(None),
     status_id: Optional[int] = Query(None)
 ):
-    query = select(ListingModel)
+    query = select(ListingModel).options(joinedload(ListingModel.images)).order_by(ListingModel.id)
 
     if city:
         query = query.where(ListingModel.city.ilike(f"%{city}%"))
@@ -83,21 +91,48 @@ async def get_all_listings(
         query = query.where(ListingModel.listing_status_id == status_id)
 
     listings = await ListingService.execute(query)
-    return listings
 
+    return [
+        ListingResponse(
+            id=l.id,
+            name=l.name,
+            description=l.description,
+            price=l.price,
+            city=l.city,
+            street=l.street,
+            building=l.building,
+            flat=l.flat,
+            floor=l.floor,
+            all_floors=l.all_floors,
+            rooms=l.rooms,
+            bathrooms=l.bathrooms,
+            square=l.square,
+            communal=l.communal,
+            created_at=l.created_at,
+            owner_id=l.owner_id,
+            heating_type_id=l.heating_type_id,
+            listing_type_id=l.listing_type_id,
+            listing_status_id=l.listing_status_id,
+            latitude=l.latitude,
+            longitude=l.longitude,
+            images=[img.image_url for img in l.images] if l.images else []
+        )
+        for l in listings
+    ]
 
-from sqlalchemy.orm import joinedload
 
 @router.get("/{id}", response_model=ListingDetailResponse)
 async def get_listing_by_id(id: int):
     query = (
         select(ListingModel)
         .options(
+            joinedload(ListingModel.images),
             joinedload(ListingModel.listing_type),
             joinedload(ListingModel.heating_type),
             joinedload(ListingModel.listing_status),
             joinedload(ListingModel.tags),
-            joinedload(ListingModel.owner),  # ✅ додано
+            joinedload(ListingModel.owner),
+            joinedload(ListingModel.images)
         )
         .where(ListingModel.id == id)
     )
@@ -139,51 +174,132 @@ async def get_listing_by_id(id: int):
         listing_type=listing.listing_type.name if listing.listing_type else None,
         heating_type=listing.heating_type.name if listing.heating_type else None,
         listing_status=listing.listing_status.name if listing.listing_status else None,
-        tags=[tag.name for tag in listing.tags]
+        tags=[tag.name for tag in listing.tags],
+        latitude=listing.latitude,
+        longitude=listing.longitude,
+        images=[img.image_url for img in listing.images] if listing.images else []
     )
 
 
 @router.post("", response_model=ListingDetailResponse)
-async def create_listing(payload: ListingPayload):
+async def create_listing(
+    name: str = Form(...),
+    description: str = Form(...),
+    price: int = Form(...),
+    city: str = Form(...),
+    street: str = Form(...),
+    building: str = Form(...),
+    flat: Optional[int] = Form(None),
+    floor: int = Form(...),
+    all_floors: int = Form(...),
+    rooms: int = Form(...),
+    bathrooms: Optional[int] = Form(None),
+    square: int = Form(...),
+    communal: int = Form(...),
+    owner_id: int = Form(...),
+    heating_type_id: int = Form(...),
+    listing_type_id: int = Form(...),
+    listing_status_id: int = Form(...),
+    tag_ids: Optional[str] = Form(None),
+    latitude_raw: Optional[str] = Form(None),
+    longitude_raw: Optional[str] = Form(None),
+    images: List[UploadFile] = File(...)
+):
+    if len(images) < 4:
+        raise HTTPException(status_code=400, detail="At least 4 images are required.")
+
+    # Парсимо координати з рядка у float
+    try:
+        latitude = float(latitude_raw) if latitude_raw else None
+        longitude = float(longitude_raw) if longitude_raw else None
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid latitude or longitude format")
+
+    # Парсимо список тегів
+    parsed_tag_ids = [int(tag.strip()) for tag in tag_ids.split(",")] if tag_ids else []
+
+    # Зберігаємо зображення у файлову систему
+    filenames = []
+    for img in images:
+        file_path = UPLOAD_DIR / img.filename
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(img.file, f)
+        filenames.append(img.filename)
+
+    # Зберігаємо оголошення та зображення в базу
     async with ListingService.session_maker() as session:
-        # Створення нового обʼєкта
-        listing = ListingModel(**payload.model_dump(exclude={"tag_ids"}))
+        listing = ListingModel(
+            name=name,
+            description=description,
+            price=price,
+            city=city,
+            street=street,
+            building=building,
+            flat=flat,
+            floor=floor,
+            all_floors=all_floors,
+            rooms=rooms,
+            bathrooms=bathrooms,
+            square=square,
+            communal=communal,
+            owner_id=owner_id,
+            heating_type_id=heating_type_id,
+            listing_type_id=listing_type_id,
+            listing_status_id=listing_status_id,
+            latitude=latitude,
+            longitude=longitude,
+            created_at=datetime.utcnow()
+        )
         session.add(listing)
         await session.flush()
+
+        for filename in filenames:
+            session.add(ImageModel(listing_id=listing.id, image_url=filename))
+
         await session.commit()
 
-        # Додаємо теги (у новій сесії, але це окей)
-        await ListingService.add_tags_to_listing(listing.id, payload.tag_ids)
+    # Додаємо теги
+    await ListingService.add_tags_to_listing(listing.id, parsed_tag_ids)
 
-        # Повторно витягуємо обʼєкт разом із тегами (новий select!)
-        query = (
+    # Завантажуємо повністю заповнений об'єкт
+    async with ListingService.session_maker() as session:
+        result = await session.execute(
             select(ListingModel)
             .options(
                 joinedload(ListingModel.tags),
                 joinedload(ListingModel.listing_type),
                 joinedload(ListingModel.heating_type),
                 joinedload(ListingModel.listing_status),
+                joinedload(ListingModel.images),
+                joinedload(ListingModel.owner),
             )
             .where(ListingModel.id == listing.id)
         )
-        result = await session.execute(query)
-        listing_with_tags = result.unique().scalar_one()
+        full_listing = result.unique().scalar_one()
 
         return ListingDetailResponse(
             **{
                 key: value
-                for key, value in listing_with_tags.__dict__.items()
+                for key, value in full_listing.__dict__.items()
                 if key not in {
-                    "tags", "_sa_instance_state",
-                    "listing_type", "heating_type", "listing_status"
+                    "_sa_instance_state",
+                    "tags", "listing_type", "heating_type", "listing_status", "images", "owner"
                 }
             },
-            listing_type=listing_with_tags.listing_type.name if listing_with_tags.listing_type else None,
-            heating_type=listing_with_tags.heating_type.name if listing_with_tags.heating_type else None,
-            listing_status=listing_with_tags.listing_status.name if listing_with_tags.listing_status else None,
-            tags=[tag.name for tag in listing_with_tags.tags]
+            tags=[tag.name for tag in full_listing.tags],
+            listing_type=full_listing.listing_type.name if full_listing.listing_type else None,
+            heating_type=full_listing.heating_type.name if full_listing.heating_type else None,
+            listing_status=full_listing.listing_status.name if full_listing.listing_status else None,
+            images=[img.image_url for img in full_listing.images],
+            owner=UserShortResponse(
+                id=full_listing.owner.id,
+                email=full_listing.owner.email,
+                first_name=full_listing.owner.first_name,
+                last_name=full_listing.owner.last_name,
+                phone=full_listing.owner.phone,
+                photo_url=full_listing.owner.photo_url,
+            ) if full_listing.owner else None
         )
-
 
 
 @router.put("/{id}", response_model=ListingDetailResponse)
@@ -196,6 +312,7 @@ async def update_listing(id: int, payload: ListingPayload):
                 joinedload(ListingModel.listing_type),
                 joinedload(ListingModel.heating_type),
                 joinedload(ListingModel.listing_status),
+                joinedload(ListingModel.owner)
             )
             .where(ListingModel.id == id)
         )
@@ -241,7 +358,9 @@ async def update_listing(id: int, payload: ListingPayload):
         listing_type=updated_listing.listing_type.name if updated_listing.listing_type else None,
         heating_type=updated_listing.heating_type.name if updated_listing.heating_type else None,
         listing_status=updated_listing.listing_status.name if updated_listing.listing_status else None,
-        tags=[tag.name for tag in updated_listing.tags]
+        tags=[tag.name for tag in updated_listing.tags],
+        latitude=updated_listing.latitude,
+        longitude=updated_listing.longitude
     )
 
 

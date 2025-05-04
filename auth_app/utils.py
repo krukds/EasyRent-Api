@@ -1,10 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt
+from sqlalchemy import select, func
 
+from auth_app.schemes import UserResponse
 from config import config
 from db import UserModel, SessionModel
+from db.models import ReviewModel
 from db.services import SessionService
+from db.services.main_services import ReviewService
 from utils import datetime_now
 
 
@@ -50,3 +54,18 @@ async def create_user_session(user_id: int) -> SessionModel:
     )
     await SessionService.save(session)
     return session
+
+
+async def build_user_response(user: UserModel) -> UserResponse:
+    # Підрахунок середнього рейтингу
+    avg_rating_query = (
+        select(func.avg(ReviewModel.rating))
+        .where(ReviewModel.user_id == user.id)
+    )
+    result = await ReviewService.execute(avg_rating_query)
+    average_rating = result[0] if result else None
+
+    return UserResponse(
+        **user.__dict__,
+        average_rating=round(average_rating, 2) if average_rating else None
+    )

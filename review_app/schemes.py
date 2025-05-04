@@ -2,6 +2,8 @@ from typing import Optional, List
 from pydantic import BaseModel, condecimal
 from datetime import datetime
 
+from auth_app.schemes import UserResponse
+
 
 class ReviewPayload(BaseModel):
     user_id: int
@@ -10,6 +12,14 @@ class ReviewPayload(BaseModel):
     description: Optional[str] = None
     review_status_id: int
     tag_ids: List[int] = []
+
+class OwnerResponse(BaseModel):
+    id: int
+    email: str
+    first_name: str
+    last_name: str
+    phone: str
+    photo_url: Optional[str] = None
 
 
 class ReviewResponse(BaseModel):
@@ -21,6 +31,8 @@ class ReviewResponse(BaseModel):
     review_status_id: int
     created_at: datetime
     tags: List[str]
+    owner: Optional[OwnerResponse] = None
+    user: Optional[UserResponse] = None
 
 
 class ReviewDetailResponse(ReviewResponse):
