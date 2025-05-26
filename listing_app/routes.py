@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File
-from sqlalchemy import select, update, insert, func
+from sqlalchemy import select, update, insert, func, null
 from sqlalchemy.orm import joinedload
 
 from db.models import ListingModel, ListingTagListingModel, ReviewModel, ImageModel
@@ -113,9 +113,8 @@ async def get_all_listings(
             heating_type_id=l.heating_type_id,
             listing_type_id=l.listing_type_id,
             listing_status_id=l.listing_status_id,
-            latitude=l.latitude,
-            longitude=l.longitude,
-            images=[img.image_url for img in l.images] if l.images else []
+            images=[img.image_url for img in l.images] if l.images else [],
+            discard_reason=l.discard_reason,
         )
         for l in listings
     ]
@@ -132,7 +131,6 @@ async def get_listing_by_id(id: int):
             joinedload(ListingModel.listing_status),
             joinedload(ListingModel.tags),
             joinedload(ListingModel.owner),
-            joinedload(ListingModel.images)
         )
         .where(ListingModel.id == id)
     )
@@ -175,9 +173,8 @@ async def get_listing_by_id(id: int):
         heating_type=listing.heating_type.name if listing.heating_type else None,
         listing_status=listing.listing_status.name if listing.listing_status else None,
         tags=[tag.name for tag in listing.tags],
-        latitude=listing.latitude,
-        longitude=listing.longitude,
-        images=[img.image_url for img in listing.images] if listing.images else []
+        images=[img.image_url for img in listing.images] if listing.images else [],
+        discard_reason=listing.discard_reason,
     )
 
 
@@ -201,19 +198,10 @@ async def create_listing(
     listing_type_id: int = Form(...),
     listing_status_id: int = Form(...),
     tag_ids: Optional[str] = Form(None),
-    latitude_raw: Optional[str] = Form(None),
-    longitude_raw: Optional[str] = Form(None),
     images: List[UploadFile] = File(...)
 ):
     if len(images) < 4:
         raise HTTPException(status_code=400, detail="At least 4 images are required.")
-
-    # Парсимо координати з рядка у float
-    try:
-        latitude = float(latitude_raw) if latitude_raw else None
-        longitude = float(longitude_raw) if longitude_raw else None
-    except ValueError:
-        raise HTTPException(status_code=422, detail="Invalid latitude or longitude format")
 
     # Парсимо список тегів
     parsed_tag_ids = [int(tag.strip()) for tag in tag_ids.split(",")] if tag_ids else []
@@ -246,9 +234,8 @@ async def create_listing(
             heating_type_id=heating_type_id,
             listing_type_id=listing_type_id,
             listing_status_id=listing_status_id,
-            latitude=latitude,
-            longitude=longitude,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
+            discard_reason=null,
         )
         session.add(listing)
         await session.flush()
@@ -359,8 +346,6 @@ async def update_listing(id: int, payload: ListingPayload):
         heating_type=updated_listing.heating_type.name if updated_listing.heating_type else None,
         listing_status=updated_listing.listing_status.name if updated_listing.listing_status else None,
         tags=[tag.name for tag in updated_listing.tags],
-        latitude=updated_listing.latitude,
-        longitude=updated_listing.longitude
     )
 
 
@@ -374,10 +359,8 @@ async def delete_listing(id: int):
     await ListingService.delete(id=id)
     return {"status": "ok"}
 
-
+ACTIVE_STATUS_ID = 1
 ARCHIVED_STATUS_ID = 2
-
-
 
 @router.put("/{id}/archive")
 async def archive_listing(id: int):
@@ -400,3 +383,40 @@ async def archive_listing(id: int):
         "message": "Listing archived successfully",
         "listing_id": archived_listing_id
     }
+
+@router.put("/{id}/activate")
+async def activate_listing(id: int):
+    query = (
+        update(ListingModel)
+        .where(ListingModel.id == id)
+        .values(listing_status_id=ACTIVE_STATUS_ID)
+        .returning(ListingModel.id)
+    )
+    print(f"Executing: UPDATE listing SET listing_status_id = {ACTIVE_STATUS_ID} WHERE id = {id}")
+
+    result = await ListingService.execute(query, commit=True)
+    activated_listing_id = result.first()
+
+    if activated_listing_id is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    return {
+        "status": "ok",
+        "message": "Listing activated successfully",
+        "listing_id": activated_listing_id
+    }
+
+
+
+@router.patch("/{id}/reason")
+async def update_discard_reason(id: int, reason: str = Form(...)):
+    query = (
+        update(ListingModel)
+        .where(ListingModel.id == id)
+        .values(discard_reason=reason)
+        .returning(ListingModel.id)
+    )
+    result = await ListingService.execute(query, commit=True)
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return {"status": "ok", "message": "Reason updated"}

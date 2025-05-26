@@ -5,8 +5,8 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
 import auth_app, listing_app, review_app, review_tag_app, heating_type_app, \
-    listing_type_app, listing_tag_category_app, listing_tag_app, subscription_app, \
-    favorites_app, admin_app, address_app, listing_status_app
+    listing_type_app, listing_tag_category_app, listing_tag_app, \
+    favorites_app, admin_app, location_app, listing_status_app
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -54,10 +54,9 @@ api_router.include_router(heating_type_app.router)
 api_router.include_router(listing_type_app.router)
 api_router.include_router(listing_tag_category_app.router)
 api_router.include_router(listing_tag_app.router)
-api_router.include_router(subscription_app.router)
 api_router.include_router(favorites_app.router)
 api_router.include_router(admin_app.router)
-api_router.include_router(address_app.router)
+api_router.include_router(location_app.router)
 api_router.include_router(listing_status_app.router)
 app.include_router(api_router)
 app.include_router(secured_router)

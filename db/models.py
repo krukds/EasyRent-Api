@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, \
-    CheckConstraint, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, CheckConstraint, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -14,11 +13,13 @@ class UserModel(Base):
     password = Column(String, nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+    patronymic = Column(String, nullable=True)
     phone = Column(String, nullable=False)
-    photo_url = Column(String, nullable=True)
+    photo_url = Column(String)
     role = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    passport_path = Column(String)
 
 class SessionModel(Base):
     __tablename__ = "session"
@@ -46,40 +47,31 @@ class ListingModel(Base):
     __tablename__ = "listing"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    description = Column(Text, nullable=False)
+    description  = Column(Text, nullable=False)
     price = Column(Integer, nullable=False)
     city = Column(String, nullable=False)
     street = Column(String, nullable=False)
     building = Column(String, nullable=False)
-    flat = Column(Integer, nullable=True)
+    flat = Column(Integer)
     floor = Column(Integer, nullable=False)
     all_floors = Column(Integer, nullable=False)
     rooms = Column(Integer, nullable=False)
-    bathrooms = Column(Integer, nullable=True)
+    bathrooms = Column(Integer)
     square = Column(Integer, nullable=False)
     communal = Column(Integer, nullable=False)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-
     owner_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    heating_type_id = Column(Integer, ForeignKey("heating_type.id", ondelete="SET NULL"), nullable=True)
-    listing_type_id = Column(Integer, ForeignKey("listing_type.id", ondelete="SET NULL"), nullable=True)
-    listing_status_id = Column(Integer, ForeignKey("listing_status.id", ondelete="SET NULL"), nullable=True)
+    heating_type_id = Column(Integer, ForeignKey("heating_type.id", ondelete="SET NULL"))
+    listing_type_id = Column(Integer, ForeignKey("listing_type.id", ondelete="SET NULL"))
+    listing_status_id = Column(Integer, ForeignKey("listing_status.id", ondelete="SET NULL"))
+    discard_reason = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    listing_type = relationship("ListingTypeModel")
+    owner = relationship("UserModel", backref="listings", foreign_keys=[owner_id])
     heating_type = relationship("HeatingTypeModel")
+    listing_type = relationship("ListingTypeModel")
     listing_status = relationship("ListingStatusModel")
-
-    tags = relationship(
-        "ListingTagModel",
-        secondary="listing_tag_listing",
-        backref="listings"
-    )
-
-    owner = relationship("UserModel", backref="listings", foreign_keys="ListingModel.owner_id")
     images = relationship("ImageModel", back_populates="listing", cascade="all, delete")
-
+    tags = relationship("ListingTagModel", secondary="listing_tag_listing", backref="listings")
 
 class ImageModel(Base):
     __tablename__ = "image"
@@ -88,37 +80,6 @@ class ImageModel(Base):
     image_url = Column(String, nullable=False)
 
     listing = relationship("ListingModel", back_populates="images")
-
-
-class SubscriptionModel(Base):
-    __tablename__ = "subscription"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    listing_type_id = Column(Integer, ForeignKey("listing_type.id", ondelete="SET NULL"), nullable=True)
-    heating_type_id = Column(Integer, ForeignKey("heating_type.id", ondelete="SET NULL"), nullable=True)
-    min_price = Column(DECIMAL, nullable=True)
-    max_price = Column(DECIMAL, nullable=True)
-    rooms = Column(Integer, nullable=True)
-    bathrooms = Column(Integer, nullable=True)
-    min_floors = Column(Integer, nullable=True)
-    max_floors = Column(Integer, nullable=True)
-    min_all_floors = Column(Integer, nullable=True)
-    max_all_floors = Column(Integer, nullable=True)
-    min_square = Column(DECIMAL, nullable=True)
-    max_square = Column(DECIMAL, nullable=True)
-    min_communal = Column(DECIMAL, nullable=True)
-    max_communal = Column(DECIMAL, nullable=True)
-    city = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    listing_type = relationship("ListingTypeModel")
-    heating_type = relationship("HeatingTypeModel")
-    tags = relationship(
-        "ListingTagModel",
-        secondary="listing_tag_subscription",
-        backref="subscriptions"
-    )
-
 
 class ReviewStatusModel(Base):
     __tablename__ = "review_status"
@@ -131,27 +92,16 @@ class ReviewModel(Base):
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     owner_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     rating = Column(DECIMAL(2, 1), CheckConstraint("rating BETWEEN 0.0 AND 5.0"), nullable=False)
-    description = Column(Text, nullable=True)
+    description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
-    review_status_id = Column(Integer, ForeignKey("review_status.id", ondelete="SET NULL"), nullable=True)
+    review_status_id = Column(Integer, ForeignKey("review_status.id", ondelete="SET NULL"))
 
     review_status = relationship("ReviewStatusModel", backref="reviews")
     tags = relationship("ReviewTagModel", secondary="review_tag_review", backref="reviews")
-    owner = relationship(
-        "UserModel",
-        foreign_keys=lambda: [ReviewModel.owner_id],
-        backref="reviews_about_me"
-    )
+    owner = relationship("UserModel", foreign_keys=[owner_id], backref="reviews_about_me")
+    user = relationship("UserModel", foreign_keys=[user_id], backref="my_written_reviews")
 
-    user = relationship(
-        "UserModel",
-        foreign_keys=lambda: [ReviewModel.user_id],
-        backref="my_written_reviews"
-    )
-
-    __table_args__ = (
-        UniqueConstraint('user_id', 'owner_id', name='uq_user_owner_review'),
-    )
+    __table_args__ = (UniqueConstraint('user_id', 'owner_id', name='uq_user_owner_review'),)
 
 class ReviewTagModel(Base):
     __tablename__ = "review_tag"
@@ -162,7 +112,7 @@ class ReviewTagReviewModel(Base):
     __tablename__ = "review_tag_review"
     id = Column(Integer, primary_key=True)
     review_id = Column(Integer, ForeignKey("review.id", ondelete="CASCADE"), nullable=False)
-    review_tag_id = Column(Integer, ForeignKey("review_tag.id", ondelete="CASCADE"), nullable=True)
+    review_tag_id = Column(Integer, ForeignKey("review_tag.id", ondelete="CASCADE"))
 
 class FavoritesModel(Base):
     __tablename__ = "favorites"
@@ -188,8 +138,3 @@ class ListingTagListingModel(Base):
     id = Column(Integer, primary_key=True)
     listing_id = Column(Integer, ForeignKey("listing.id", ondelete="CASCADE"), nullable=False)
     listing_tag_id = Column(Integer, ForeignKey("listing_tag.id", ondelete="CASCADE"), nullable=False)
-
-class ListingTagSubscriptionModel(Base):
-    __tablename__ = "listing_tag_subscription"
-    subscription_id = Column(Integer, ForeignKey("subscription.id", ondelete="CASCADE"), primary_key=True)
-    listing_tag_id = Column(Integer, ForeignKey("listing_tag.id", ondelete="CASCADE"), primary_key=True)

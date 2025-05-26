@@ -11,7 +11,6 @@ from db.models import (
     HeatingTypeModel,
     ListingStatusModel,
     ImageModel,
-    SubscriptionModel,
     ReviewModel,
     ReviewStatusModel,
     ReviewTagModel,
@@ -20,7 +19,6 @@ from db.models import (
     ListingTagCategoryModel,
     ListingTagModel,
     ListingTagListingModel,
-    ListingTagSubscriptionModel,
 )
 from db.services.base_service import BaseService
 
@@ -111,21 +109,6 @@ class ImageService(BaseService[ImageModel]):
     session_maker = async_session_maker
 
 
-class SubscriptionService(BaseService[SubscriptionModel]):
-    model = SubscriptionModel
-    session_maker = async_session_maker
-
-    @classmethod
-    async def add_tags_to_subscription(cls, subscription_id: int, tag_ids: List[int]):
-        if not tag_ids:
-            return
-        async with cls.session_maker() as session:
-            values = [{"subscription_id": subscription_id, "listing_tag_id": tag_id} for tag_id in tag_ids]
-            insert_query = insert(ListingTagSubscriptionModel).values(values)
-            await session.execute(insert_query)
-            await session.commit()
-
-
 class ReviewService(BaseService[ReviewModel]):
     model = ReviewModel
     session_maker = async_session_maker
@@ -176,7 +159,3 @@ class ListingTagListingService(BaseService[ListingTagListingModel]):
     model = ListingTagListingModel
     session_maker = async_session_maker
 
-
-class ListingTagSubscriptionService(BaseService[ListingTagSubscriptionModel]):
-    model = ListingTagSubscriptionModel
-    session_maker = async_session_maker

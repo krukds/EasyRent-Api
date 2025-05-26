@@ -23,8 +23,7 @@ class ListingPayload(BaseModel):
     listing_status_id: int
     tag_ids: List[int] = []
     images: List[str]
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    discard_reason: Optional[str] = None
 
 
 class ListingResponse(BaseModel):
@@ -47,9 +46,8 @@ class ListingResponse(BaseModel):
     listing_type_id: int
     listing_status_id: int
     created_at: datetime
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
     images: list[str] = []
+    discard_reason: Optional[str] = None
 
 
 class UserShortResponse(BaseModel):
@@ -84,9 +82,9 @@ class ListingDetailResponse(BaseModel):
     listing_status: str
     created_at: datetime
     tags: List[str] = []
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
     images: list[str] = []
+    discard_reason: Optional[str] = None
+
 
 
 

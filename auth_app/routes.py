@@ -104,18 +104,15 @@ async def signup(
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(user: UserModel = Depends(get_current_active_user)) -> UserResponse:
-    # 🎯 Отримуємо середній рейтинг як власника
-    avg_rating_query = (
-        select(func.avg(ReviewModel.rating))
-        .where(ReviewModel.user_id  == user.id)
-    )
-    result = await ReviewService.execute(avg_rating_query)
-    average_rating = result[0] if result else None
-    
+    rating_data = await UserService.get_user_rating_stats(user.id)
+
     return UserResponse(
         **user.__dict__,
-        average_rating=round(average_rating, 2) if average_rating else None
+        average_rating=round(rating_data["average_rating"], 2) if rating_data["average_rating"] else None,
+        reviews_count=rating_data["reviews_count"]
     )
+
+
 
 @router.get("/id")
 async def get_user_by_id(
@@ -127,7 +124,13 @@ async def get_user_by_id(
     if not user:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No user with this id found")
 
-    return UserResponse(**user.__dict__)
+    rating_data = await UserService.get_user_rating_stats(user_id)
+
+    return UserResponse(
+        **user.__dict__,
+        average_rating=round(rating_data["average_rating"], 2) if rating_data["average_rating"] else None,
+        reviews_count=rating_data["reviews_count"]
+    )
 
 
 @router.get("/email")
@@ -211,8 +214,6 @@ async def get_all_users(
 
 
 
-
-
 @router.post("/upload-photo", response_model=UserResponse)
 async def upload_user_photo(
     file: UploadFile = File(...),
@@ -227,6 +228,29 @@ async def upload_user_photo(
 
     # Оновлення photo_url користувача
     user.photo_url = file.filename
+    updated_user = await UserService.save(user)
+
+    return UserResponse(**updated_user.__dict__)
+
+@router.post("/upload-passport", response_model=UserResponse)
+async def upload_user_passport(
+    file: UploadFile = File(...),
+    user: UserModel = Depends(get_current_active_user)
+):
+    PASSPORT_DIR = Path("static/user_passports")
+    os.makedirs(PASSPORT_DIR, exist_ok=True)
+
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in [".pdf", ".jpg", ".jpeg", ".png"]:
+        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
+
+    file_name = f"{user.id}_passport{file_ext}"
+    file_path = PASSPORT_DIR / file_name
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    user.passport_path = str(file_path)
     updated_user = await UserService.save(user)
 
     return UserResponse(**updated_user.__dict__)
