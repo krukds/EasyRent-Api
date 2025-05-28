@@ -3,11 +3,10 @@ import json
 import openai
 import time
 
-ORGANISATION_ID = "org-X8cLtCtPJakIJXwKaQIm7BKe"
-API_KEY = "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"
-VERIFICATION_ASSISTANT_ID = "asst_RKvextCvANlRLmxkhdSKvujK"
-openai.api_key = API_KEY
+from config import config
 
+openai.organization = config.ORGANISATION_ID
+openai.api_key = config.API_KEY.get_secret_value()
 
 def passport_documents_verification(document_photos_paths: list[str]) -> dict:
     openai_document_ids = []
@@ -38,7 +37,7 @@ def passport_documents_verification(document_photos_paths: list[str]) -> dict:
     )
     run = openai.beta.threads.runs.create(
         thread_id=thread.id,
-        assistant_id=VERIFICATION_ASSISTANT_ID
+        assistant_id=config.VERIFICATION_ASSISTANT_ID
     )
 
     while True:

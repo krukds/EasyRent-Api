@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     JWT_REFRESH_SECRET_KEY: SecretStr
     ALGORITHM: str = "HS256"
 
+    ORGANISATION_ID: str
+    API_KEY: SecretStr
+    VERIFICATION_ASSISTANT_ID: str
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
