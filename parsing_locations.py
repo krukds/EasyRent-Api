@@ -56,7 +56,7 @@ def translate_oblast_name(ukr_name: str) -> str:
 
 # --- DB connection ---
 conn = psycopg2.connect(
-    dbname="ukraine_locations", user="postgres", password="postgres", host="localhost"
+    dbname="EasyRent", user="postgres", password="postgres", host="localhost"
 )
 cur = conn.cursor()
 

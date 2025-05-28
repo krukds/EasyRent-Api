@@ -2,13 +2,15 @@ from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
+from listing_tag_app.schemes import ListingTagShort
+
 
 class ListingPayload(BaseModel):
     name: str
     description: str
     price: int
-    city: str
-    street: str
+    city_id: int
+    street_id: int
     building: str
     flat: Optional[int] = None
     floor: int
@@ -31,8 +33,10 @@ class ListingResponse(BaseModel):
     name: str
     description: str
     price: int
-    city: str
-    street: str
+    city_id: int
+    city_name: str
+    street_id: int
+    street_name_ukr: str
     building: str
     flat: Optional[int] = None
     floor: int
@@ -48,6 +52,7 @@ class ListingResponse(BaseModel):
     created_at: datetime
     images: list[str] = []
     discard_reason: Optional[str] = None
+    tags: List[ListingTagShort] = []
 
 
 class UserShortResponse(BaseModel):
@@ -66,8 +71,10 @@ class ListingDetailResponse(BaseModel):
     name: str
     description: str
     price: int
-    city: str
-    street: str
+    city_id: int
+    city_name: str
+    street_id: int
+    street_name_ukr: str
     building: str
     flat: Optional[int]
     floor: int

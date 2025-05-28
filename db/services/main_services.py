@@ -18,7 +18,7 @@ from db.models import (
     FavoritesModel,
     ListingTagCategoryModel,
     ListingTagModel,
-    ListingTagListingModel,
+    ListingTagListingModel, CityModel, StreetModel,
 )
 from db.services.base_service import BaseService
 
@@ -159,3 +159,10 @@ class ListingTagListingService(BaseService[ListingTagListingModel]):
     model = ListingTagListingModel
     session_maker = async_session_maker
 
+class CityService(BaseService[CityModel]):
+    model = CityModel
+    session_maker = async_session_maker
+
+class StreetService(BaseService[StreetModel]):
+    model = StreetModel
+    session_maker = async_session_maker

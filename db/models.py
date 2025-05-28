@@ -49,8 +49,8 @@ class ListingModel(Base):
     name = Column(String, nullable=False)
     description  = Column(Text, nullable=False)
     price = Column(Integer, nullable=False)
-    city = Column(String, nullable=False)
-    street = Column(String, nullable=False)
+    city_id = Column(Integer, ForeignKey("city.id", ondelete="SET NULL"), nullable=True)
+    street_id = Column(Integer, ForeignKey("street.id", ondelete="SET NULL"), nullable=True)
     building = Column(String, nullable=False)
     flat = Column(Integer)
     floor = Column(Integer, nullable=False)
@@ -72,6 +72,9 @@ class ListingModel(Base):
     listing_status = relationship("ListingStatusModel")
     images = relationship("ImageModel", back_populates="listing", cascade="all, delete")
     tags = relationship("ListingTagModel", secondary="listing_tag_listing", backref="listings")
+    city = relationship("CityModel", back_populates="listings")
+    street = relationship("StreetModel", back_populates="listings")
+
 
 class ImageModel(Base):
     __tablename__ = "image"
@@ -138,3 +141,25 @@ class ListingTagListingModel(Base):
     id = Column(Integer, primary_key=True)
     listing_id = Column(Integer, ForeignKey("listing.id", ondelete="CASCADE"), nullable=False)
     listing_tag_id = Column(Integer, ForeignKey("listing_tag.id", ondelete="CASCADE"), nullable=False)
+
+class CityModel(Base):
+    __tablename__ = "city"
+    id = Column(Integer, primary_key=True)
+    name_ukr = Column(String, nullable=False)
+    name_eng = Column(String)
+    region = Column(String)
+    oblast = Column(String)
+    oblast_eng = Column(String)
+
+    streets = relationship("StreetModel", back_populates="city")
+    listings = relationship("ListingModel", back_populates="city")
+
+class StreetModel(Base):
+    __tablename__ = "street"
+    id = Column(Integer, primary_key=True)
+    name_ukr = Column(String, nullable=False)
+    name_eng = Column(String)
+    city_id = Column(Integer, ForeignKey("city.id", ondelete="CASCADE"), nullable=False)
+
+    city = relationship("CityModel", back_populates="streets")
+    listings = relationship("ListingModel", back_populates="street")

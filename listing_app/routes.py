@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File
 from sqlalchemy import select, update, insert, func, null
 from sqlalchemy.orm import joinedload
 
-from db.models import ListingModel, ListingTagListingModel, ReviewModel, ImageModel
+from db.models import ListingModel, ListingTagListingModel, ReviewModel, ImageModel, ListingTagModel
 from db.services.main_services import ListingService, ReviewService, UserService
+from listing_tag_app.schemes import ListingTagShort
 from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse
 from typing import List, Optional
 from sqlalchemy.orm import joinedload
@@ -22,8 +23,8 @@ router = APIRouter(
 
 @router.get("", response_model=List[ListingResponse])
 async def get_all_listings(
-    city: Optional[str] = Query(None),
-    street: Optional[str] = Query(None),
+    city_id: Optional[int] = Query(None),
+    street_id: Optional[int] = Query(None),
     building: Optional[str] = Query(None),
     min_price: Optional[int] = Query(None),
     max_price: Optional[int] = Query(None),
@@ -40,14 +41,31 @@ async def get_all_listings(
     owner_id: Optional[int] = Query(None),
     heating_type_id: Optional[int] = Query(None),
     listing_type_id: Optional[int] = Query(None),
-    status_id: Optional[int] = Query(None)
+    status_id: Optional[int] = Query(None),
+    tag_ids: Optional[List[int]] = Query(None),
+    sort_by: str = Query("price_desc")
 ):
-    query = select(ListingModel).options(joinedload(ListingModel.images)).order_by(ListingModel.id)
+    query = (
+        select(ListingModel)
+        .options(
+            joinedload(ListingModel.images),
+            joinedload(ListingModel.street),
+            joinedload(ListingModel.city),
+            joinedload(ListingModel.tags)
+        )
+    )
 
-    if city:
-        query = query.where(ListingModel.city.ilike(f"%{city}%"))
-    if street:
-        query = query.where(ListingModel.street.ilike(f"%{street}%"))
+    if sort_by == "price_desc":
+        query = query.order_by(ListingModel.price.desc())
+    elif sort_by == "price_asc":
+        query = query.order_by(ListingModel.price.asc())
+    else:
+        query = query.order_by(ListingModel.id.desc())
+
+    if city_id:
+        query = query.where(ListingModel.city_id == city_id)
+    if street_id:
+        query = query.where(ListingModel.street_id == street_id)
     if building:
         query = query.where(ListingModel.building.ilike(f"%{building}%"))
 
@@ -89,6 +107,8 @@ async def get_all_listings(
         query = query.where(ListingModel.listing_type_id == listing_type_id)
     if status_id is not None:
         query = query.where(ListingModel.listing_status_id == status_id)
+    if tag_ids:
+        query = query.where(ListingModel.tags.any(ListingTagModel.id.in_(tag_ids)))
 
     listings = await ListingService.execute(query)
 
@@ -98,8 +118,10 @@ async def get_all_listings(
             name=l.name,
             description=l.description,
             price=l.price,
-            city=l.city,
-            street=l.street,
+            city_id=l.city_id,
+            city_name=l.city.name_ukr if l.city else "",
+            street_id=l.street_id,
+            street_name_ukr=l.street.name_ukr if l.street else "",
             building=l.building,
             flat=l.flat,
             floor=l.floor,
@@ -115,6 +137,10 @@ async def get_all_listings(
             listing_status_id=l.listing_status_id,
             images=[img.image_url for img in l.images] if l.images else [],
             discard_reason=l.discard_reason,
+            tags=[
+                ListingTagShort(id=tag.id, name=tag.name)
+                for tag in l.tags
+            ] if l.tags else []
         )
         for l in listings
     ]
@@ -131,6 +157,8 @@ async def get_listing_by_id(id: int):
             joinedload(ListingModel.listing_status),
             joinedload(ListingModel.tags),
             joinedload(ListingModel.owner),
+            joinedload(ListingModel.street),
+            joinedload(ListingModel.city),
         )
         .where(ListingModel.id == id)
     )
@@ -148,8 +176,10 @@ async def get_listing_by_id(id: int):
         name=listing.name,
         description=listing.description,
         price=listing.price,
-        city=listing.city,
-        street=listing.street,
+        city_id=listing.city_id,
+        city_name=listing.city.name_ukr if listing.city else "",
+        street_id=listing.street_id,
+        street_name_ukr=listing.street.name_ukr if listing.street else "",
         building=listing.building,
         flat=listing.flat,
         floor=listing.floor,
@@ -183,8 +213,8 @@ async def create_listing(
     name: str = Form(...),
     description: str = Form(...),
     price: int = Form(...),
-    city: str = Form(...),
-    street: str = Form(...),
+    city_id: int = Form(...),
+    street_id: int = Form(...),
     building: str = Form(...),
     flat: Optional[int] = Form(None),
     floor: int = Form(...),
@@ -220,8 +250,8 @@ async def create_listing(
             name=name,
             description=description,
             price=price,
-            city=city,
-            street=street,
+            city_id=city_id,
+            street_id=street_id,
             building=building,
             flat=flat,
             floor=floor,
