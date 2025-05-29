@@ -228,6 +228,9 @@ async def upload_user_passport(
         file: UploadFile = File(...),
         user: UserModel = Depends(get_current_active_user)
 ):
+    if user.is_verified:
+        raise HTTPException(status_code=400, detail="Ви вже верифіковані")
+
     PASSPORT_DIR = Path("static/user_passports")
     os.makedirs(PASSPORT_DIR, exist_ok=True)
 
@@ -240,6 +243,7 @@ async def upload_user_passport(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Passport verification
     passport_data = await passport_documents_verification([str(file_path)])
     if not passport_data.valid_data \
             or not passport_data.patronymic \
@@ -249,12 +253,19 @@ async def upload_user_passport(
             or not passport_data.is_front_side:
         raise HTTPException(
             status_code=400,
-            detail=passport_data.error_details or "Could not validate your passport"
+            detail=passport_data.error_details or "Не змогли провалідувати ваш паспорт"
+        )
+    if user.first_name != passport_data.first_name or \
+            user.last_name != passport_data.second_name or \
+            user.patronymic != passport_data.patronymic:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Не збігаються ваші дані з даними на документі. "
+                   f"Ви: {user.last_name} {user.first_name} {user.patronymic}. "
+                   f"На документі: {passport_data.second_name} {passport_data.first_name} {passport_data.patronymic}"
         )
 
-    user.first_name = passport_data.first_name
-    user.last_name = passport_data.second_name
-    user.patronymic = passport_data.patronymic
+    #
     user.birth_date = passport_data.birth_date
     user.passport_path = str(file_path)
     user.is_verified = True
