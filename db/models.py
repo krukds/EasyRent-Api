@@ -1,10 +1,12 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, CheckConstraint, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text, DECIMAL, UniqueConstraint, \
+    CheckConstraint, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 Base = declarative_base()
+
 
 class UserModel(Base):
     __tablename__ = "user"
@@ -14,12 +16,14 @@ class UserModel(Base):
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
     patronymic = Column(String, nullable=True)
+    birth_date = Column(String, nullable=True)
     phone = Column(String, nullable=False)
     photo_url = Column(String)
     role = Column(Integer, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     passport_path = Column(String)
+
 
 class SessionModel(Base):
     __tablename__ = "session"
@@ -28,26 +32,30 @@ class SessionModel(Base):
     access_token = Column(String, nullable=False, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
 
+
 class ListingTypeModel(Base):
     __tablename__ = "listing_type"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
+
 
 class HeatingTypeModel(Base):
     __tablename__ = "heating_type"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
 
+
 class ListingStatusModel(Base):
     __tablename__ = "listing_status"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
 
+
 class ListingModel(Base):
     __tablename__ = "listing"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    description  = Column(Text, nullable=False)
+    description = Column(Text, nullable=False)
     price = Column(Integer, nullable=False)
     city_id = Column(Integer, ForeignKey("city.id", ondelete="SET NULL"), nullable=True)
     street_id = Column(Integer, ForeignKey("street.id", ondelete="SET NULL"), nullable=True)
@@ -84,10 +92,12 @@ class ImageModel(Base):
 
     listing = relationship("ListingModel", back_populates="images")
 
+
 class ReviewStatusModel(Base):
     __tablename__ = "review_status"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
+
 
 class ReviewModel(Base):
     __tablename__ = "review"
@@ -106,10 +116,12 @@ class ReviewModel(Base):
 
     __table_args__ = (UniqueConstraint('user_id', 'owner_id', name='uq_user_owner_review'),)
 
+
 class ReviewTagModel(Base):
     __tablename__ = "review_tag"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
+
 
 class ReviewTagReviewModel(Base):
     __tablename__ = "review_tag_review"
@@ -117,16 +129,19 @@ class ReviewTagReviewModel(Base):
     review_id = Column(Integer, ForeignKey("review.id", ondelete="CASCADE"), nullable=False)
     review_tag_id = Column(Integer, ForeignKey("review_tag.id", ondelete="CASCADE"))
 
+
 class FavoritesModel(Base):
     __tablename__ = "favorites"
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     listing_id = Column(Integer, ForeignKey("listing.id", ondelete="CASCADE"), nullable=False)
 
+
 class ListingTagCategoryModel(Base):
     __tablename__ = "listing_tag_category"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
+
 
 class ListingTagModel(Base):
     __tablename__ = "listing_tag"
@@ -136,11 +151,13 @@ class ListingTagModel(Base):
 
     category = relationship("ListingTagCategoryModel", backref="tags")
 
+
 class ListingTagListingModel(Base):
     __tablename__ = "listing_tag_listing"
     id = Column(Integer, primary_key=True)
     listing_id = Column(Integer, ForeignKey("listing.id", ondelete="CASCADE"), nullable=False)
     listing_tag_id = Column(Integer, ForeignKey("listing_tag.id", ondelete="CASCADE"), nullable=False)
+
 
 class CityModel(Base):
     __tablename__ = "city"
@@ -153,6 +170,7 @@ class CityModel(Base):
 
     streets = relationship("StreetModel", back_populates="city")
     listings = relationship("ListingModel", back_populates="city")
+
 
 class StreetModel(Base):
     __tablename__ = "street"

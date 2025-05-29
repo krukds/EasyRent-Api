@@ -61,6 +61,7 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)) -> UserMo
 
     return user
 
+
 def get_admin_user(current_user: UserModel = Depends(get_current_active_user)) -> UserModel:
     if current_user.role != 0:  # або інше значення, яке відповідає адміну
         raise HTTPException(

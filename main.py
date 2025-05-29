@@ -8,6 +8,7 @@ import auth_app, listing_app, review_app, review_tag_app, heating_type_app, \
     listing_type_app, listing_tag_category_app, listing_tag_app, \
     favorites_app, admin_app, location_app, listing_status_app
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
@@ -44,7 +45,6 @@ api_router = APIRouter(
     # dependencies=[Depends(auth_app.auth_secure)]
 
 )
-
 
 api_router.include_router(auth_app.router)
 api_router.include_router(listing_app.router)

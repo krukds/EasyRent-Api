@@ -5,3 +5,8 @@ __pycache__
 TEST/
 .venv
 addressData.xml
+venv
+static/user_passports
+static/user_photos
+static/listing_photos
+tests.py

@@ -1,23 +1,19 @@
-import datetime
 import os
 import shutil
 from pathlib import Path
-from typing import Optional, List
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import ValidationError
-from sqlalchemy import select, func
-from sqlalchemy.orm import Query, joinedload
+from sqlalchemy import select
 from starlette import status
 from starlette.status import HTTP_404_NOT_FOUND
 
 from db import UserModel
-from db.models import ReviewModel
 from db.services import UserService
-from db.services.main_services import ReviewService
-from utils import datetime_now
-from .deps import get_current_active_user
+from services.gpt_services import passport_documents_verification
+from .deps import get_current_active_user, get_admin_user
 from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload
 from .utils import create_user_session, build_user_response
 
@@ -30,7 +26,7 @@ router = APIRouter(
 
 @router.post("/login")
 async def login(
-    payload: OAuth2PasswordRequestForm = Depends()
+        payload: OAuth2PasswordRequestForm = Depends()
 ) -> TokenResponse:
     if "@" in payload.username:
         filter_field = UserModel.email == payload.username
@@ -40,7 +36,7 @@ async def login(
     user = await UserService.select_one(
         filter_field,
         UserModel.password == payload.password,
-    )
+        )
 
     if user is None:
         raise HTTPException(
@@ -54,6 +50,7 @@ async def login(
         access_token=session.access_token,
         refresh_token=None
     )
+
 
 @router.post("/signup")
 async def signup(
@@ -113,7 +110,6 @@ async def get_me(user: UserModel = Depends(get_current_active_user)) -> UserResp
     )
 
 
-
 @router.get("/id")
 async def get_user_by_id(
         user_id: int
@@ -147,28 +143,24 @@ async def get_user_by_email(
 
 
 @router.delete("/id")
-async def delete_user_by_id(
-        user_id: int
+async def delete_me(
+        user: UserModel = Depends(get_current_active_user)
 ):
-    await UserService.delete(id=user_id)
+    await UserService.delete(id=user.id)
 
     return {"status": "ok"}
 
 
 @router.put("/id")
-async def update_user_by_id(
-        user_id: int,
-        payload: UserPayload
+async def update_user(
+        payload: UserPayload,
+        user: UserModel = Depends(get_current_active_user)
 ) -> UserResponse:
-    # Отримуємо користувача
-    user: UserModel = await UserService.select_one(
-        UserModel.id == user_id
-    )
-    if not user:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No user with this id found")
 
-    # Оновлюємо поля, якщо вони були передані
     for key, value in payload.model_dump().items():
+        if user.is_verified and key in ["first_name", "last_name", "patronymic", "birth_date"]:
+            continue
+
         if value is not None:  # Перевіряємо, чи передано значення
             setattr(user, key, value)
         elif key == 'photo_url' and value is None:  # Якщо передано null для фото
@@ -178,10 +170,10 @@ async def update_user_by_id(
 
     return await build_user_response(user)
 
+
 @router.get("", response_model=List[UserResponse])
 async def get_all_users(
-        # location_id: int = None,
-        # department_id: int = None
+        user: UserModel = Depends(get_admin_user)
 ) -> List[UserResponse]:
     base_query = select(UserModel)
 
@@ -192,7 +184,6 @@ async def get_all_users(
     #     base_query = base_query.where(UserModel.department_id == department_id)
 
     users = await UserService.execute(base_query)
-
 
     if not users:
         raise HTTPException(status_code=404, detail="No users found")
@@ -213,11 +204,10 @@ async def get_all_users(
     # ]
 
 
-
 @router.post("/upload-photo", response_model=UserResponse)
 async def upload_user_photo(
-    file: UploadFile = File(...),
-    user: UserModel = Depends(get_current_active_user)
+        file: UploadFile = File(...),
+        user: UserModel = Depends(get_current_active_user)
 ):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -232,25 +222,42 @@ async def upload_user_photo(
 
     return UserResponse(**updated_user.__dict__)
 
+
 @router.post("/upload-passport", response_model=UserResponse)
 async def upload_user_passport(
-    file: UploadFile = File(...),
-    user: UserModel = Depends(get_current_active_user)
+        file: UploadFile = File(...),
+        user: UserModel = Depends(get_current_active_user)
 ):
     PASSPORT_DIR = Path("static/user_passports")
     os.makedirs(PASSPORT_DIR, exist_ok=True)
 
     file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in [".pdf", ".jpg", ".jpeg", ".png"]:
-        raise HTTPException(status_code=400, detail="Only PDF or image files are allowed")
+    if file_ext not in [".jpg", ".jpeg", ".png"]:
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    file_name = f"{user.id}_passport{file_ext}"
-    file_path = PASSPORT_DIR / file_name
+    file_path = PASSPORT_DIR / f"{user.id}__passport{file_ext}"
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    passport_data = await passport_documents_verification([str(file_path)])
+    if not passport_data.valid_data \
+            or not passport_data.patronymic \
+            or not passport_data.first_name \
+            or not passport_data.birth_date \
+            or passport_data.error_details \
+            or not passport_data.is_front_side:
+        raise HTTPException(
+            status_code=400,
+            detail=passport_data.error_details or "Could not validate your passport"
+        )
+
+    user.first_name = passport_data.first_name
+    user.last_name = passport_data.second_name
+    user.patronymic = passport_data.patronymic
+    user.birth_date = passport_data.birth_date
     user.passport_path = str(file_path)
+    user.is_verified = True
     updated_user = await UserService.save(user)
 
     return UserResponse(**updated_user.__dict__)
