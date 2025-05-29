@@ -4,12 +4,20 @@ from jose import jwt
 from sqlalchemy import select, func
 
 from auth_app.schemes import UserResponse
-from config import config
+from config import config, password_crypt_context
 from db import UserModel, SessionModel
 from db.models import ReviewModel
 from db.services import SessionService
 from db.services.main_services import ReviewService
 from utils import datetime_now
+
+
+def hash_password(password: str) -> str:
+    return password_crypt_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return password_crypt_context.verify(plain_password, hashed_password)
 
 
 def create_access_token(user_id: int, expires_at: datetime = None) -> str:
@@ -60,7 +68,7 @@ async def build_user_response(user: UserModel) -> UserResponse:
     # Підрахунок середнього рейтингу
     avg_rating_query = (
         select(func.avg(ReviewModel.rating))
-        .where(ReviewModel.user_id == user.id)
+            .where(ReviewModel.user_id == user.id)
     )
     result = await ReviewService.execute(avg_rating_query)
     average_rating = result[0] if result else None

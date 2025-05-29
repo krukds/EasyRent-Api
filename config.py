@@ -1,5 +1,6 @@
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from passlib.context import CryptContext
 
 
 class Settings(BaseSettings):
@@ -23,3 +24,4 @@ class Settings(BaseSettings):
 
 
 config = Settings()
+password_crypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

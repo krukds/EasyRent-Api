@@ -15,7 +15,7 @@ from db.services import UserService
 from services.gpt_services import passport_documents_verification
 from .deps import get_current_active_user, get_admin_user
 from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload
-from .utils import create_user_session, build_user_response
+from .utils import create_user_session, build_user_response, hash_password, verify_password
 
 UPLOAD_DIR = Path("static/user_photos")
 router = APIRouter(
@@ -35,10 +35,9 @@ async def login(
 
     user = await UserService.select_one(
         filter_field,
-        UserModel.password == payload.password,
-        )
+    )
 
-    if user is None:
+    if user is None or not verify_password(payload.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Incorrect email or password"
@@ -76,9 +75,11 @@ async def signup(
             detail="This phone number is already used"
         )
 
+    payload_data = payload.model_dump()
+    payload_data["password"] = hash_password(payload_data["password"])
     try:
         user = UserModel(
-            **payload.model_dump(),
+            **payload_data,
             photo_url=None,
             role=1,
             is_active=True

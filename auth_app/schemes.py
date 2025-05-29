@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 
 
@@ -14,7 +14,7 @@ class LoginPayload(BaseModel):
 
 
 class SignupPayload(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     first_name: str
     last_name: str
