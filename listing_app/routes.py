@@ -1,18 +1,19 @@
-from datetime import datetime
 import shutil
+import time
+from datetime import datetime
 from pathlib import Path
-
-from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File
-from sqlalchemy import select, update, insert, func, null
-from sqlalchemy.orm import joinedload
-
-from db.models import ListingModel, ListingTagListingModel, ReviewModel, ImageModel, ListingTagModel
-from db.services.main_services import ListingService, ReviewService, UserService
-from listing_tag_app.schemes import ListingTagShort
-from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse
 from typing import List, Optional
+
+from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File, Depends, status
+from sqlalchemy import select, update, null
 from sqlalchemy.orm import joinedload
 
+from auth_app import get_current_active_user
+from db.models import ListingModel, ImageModel, ListingTagModel, UserModel
+from db.services.main_services import ListingService, UserService
+from listing_tag_app.schemes import ListingTagShort
+from services.gpt_services import ownership_documents_verification, text_verification
+from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse
 
 UPLOAD_DIR = Path("static/listing_photos")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -210,29 +211,60 @@ async def get_listing_by_id(id: int):
 
 @router.post("", response_model=ListingDetailResponse)
 async def create_listing(
-    name: str = Form(...),
-    description: str = Form(...),
-    price: int = Form(...),
-    city_id: int = Form(...),
-    street_id: int = Form(...),
-    building: str = Form(...),
-    flat: Optional[int] = Form(None),
-    floor: int = Form(...),
-    all_floors: int = Form(...),
-    rooms: int = Form(...),
-    bathrooms: Optional[int] = Form(None),
-    square: int = Form(...),
-    communal: int = Form(...),
-    owner_id: int = Form(...),
-    heating_type_id: int = Form(...),
-    listing_type_id: int = Form(...),
-    listing_status_id: int = Form(...),
-    tag_ids: Optional[str] = Form(None),
-    images: List[UploadFile] = File(...)
-):
-    if len(images) < 4:
-        raise HTTPException(status_code=400, detail="At least 4 images are required.")
+        name: str = Form(...),
+        description: str = Form(...),
+        price: int = Form(...),
+        city_id: int = Form(...),
+        street_id: int = Form(...),
+        building: str = Form(...),
+        flat: Optional[int] = Form(None),
+        floor: int = Form(...),
+        all_floors: int = Form(...),
+        rooms: int = Form(...),
+        bathrooms: Optional[int] = Form(None),
+        square: int = Form(...),
+        communal: int = Form(...),
+        # owner_id: int = Form(...),
+        heating_type_id: int = Form(...),
+        listing_type_id: int = Form(...),
+        listing_status_id: int = Form(...),
+        tag_ids: Optional[str] = Form(None),
+        images: List[UploadFile] = File(...),
+        document_ownership: UploadFile = File(...),
+        user: UserModel = Depends(get_current_active_user)
 
+):
+    if not user.is_verified:
+        raise HTTPException(status_code=400, detail="Ви повинні бути верифікованими")
+
+    if len(images) < 4:
+        raise HTTPException(status_code=400, detail="Повинно бути щонайменше 4 фотографії")
+
+    # Ownership Verification
+    document_ownership_path = UPLOAD_DIR / f"{time.time()}-{document_ownership.filename}"
+    with open(document_ownership_path, "wb") as f:
+        shutil.copyfileobj(document_ownership.file, f)
+    verification_result = await ownership_documents_verification(
+        user.first_name,
+        user.last_name,
+        user.patronymic,
+        user.birth_date,
+        str(document_ownership_path)
+    )
+    if not verification_result.valid or not verification_result.belongs_to_user or verification_result.error_details:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ваше фото документу 'Право власності' не пройшло модерацію. Причина: {verification_result.error_details or '-'}"
+        )
+
+    # Content Verification
+    verification_result = await text_verification(f"Оголошення про нерухомість:\n{name}\n{description}")
+    if not verification_result.is_ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ваше оголошення не пройшло модерацію. Причина: {verification_result.reason_details or '-'}"
+        )
+    
     # Парсимо список тегів
     parsed_tag_ids = [int(tag.strip()) for tag in tag_ids.split(",")] if tag_ids else []
 
@@ -260,7 +292,7 @@ async def create_listing(
             bathrooms=bathrooms,
             square=square,
             communal=communal,
-            owner_id=owner_id,
+            owner_id=user.id,
             heating_type_id=heating_type_id,
             listing_type_id=listing_type_id,
             listing_status_id=listing_status_id,

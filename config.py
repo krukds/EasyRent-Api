@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     API_KEY: SecretStr
     VERIFICATION_ASSISTANT_ID: str
     MODERATOR_ASSISTANT_ID: str
+    OWNERSHIP_VERIFICATION_ASSISTANT_ID: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
