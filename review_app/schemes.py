@@ -10,8 +10,9 @@ class ReviewPayload(BaseModel):
     owner_id: int
     rating: condecimal(max_digits=2, decimal_places=1)  # Обмеження 0.0 - 5.0
     description: Optional[str] = None
-    review_status_id: int
+    # review_status_id: int
     tag_ids: List[int] = []
+
 
 class OwnerResponse(BaseModel):
     id: int

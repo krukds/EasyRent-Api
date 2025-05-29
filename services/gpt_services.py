@@ -23,13 +23,7 @@ class IdVerificationGptResult(BaseModel):
 
 class TextVerificationGptResult(BaseModel):
     is_ok: bool = False
-    valid_data: bool = False
-    first_name: str = ''
-    second_name: str = ''
-    patronymic: str = ''
-    birth_date: str = ''
-    error_details: str = ''
-    is_front_side: bool = False
+    reason_details: str = ''
 
 
 async def passport_documents_verification(document_photos_paths: list[str]) -> IdVerificationGptResult:
@@ -84,7 +78,7 @@ async def passport_documents_verification(document_photos_paths: list[str]) -> I
     return IdVerificationGptResult()
 
 
-async def text_verification(text) -> IdVerificationGptResult:
+async def text_verification(text: str) -> TextVerificationGptResult:
 
     thread = await client.beta.threads.create()
 
@@ -103,7 +97,7 @@ async def text_verification(text) -> IdVerificationGptResult:
 
     run = await client.beta.threads.runs.create(
         thread_id=thread.id,
-        assistant_id=config.VERIFICATION_ASSISTANT_ID
+        assistant_id=config.MODERATOR_ASSISTANT_ID
     )
 
     while True:
@@ -119,6 +113,9 @@ async def text_verification(text) -> IdVerificationGptResult:
 
     for msg in reversed(messages.data):
         if msg.role == "assistant":
-            return IdVerificationGptResult(**json.loads(msg.content[0].text.value))
+            result_text = msg.content[0].text.value
+            return TextVerificationGptResult(**json.loads(
+                result_text.replace("json", "").replace("`", "")
+            ))
 
-    return IdVerificationGptResult()
+    return TextVerificationGptResult()

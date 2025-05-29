@@ -1,13 +1,17 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import joinedload
 from sqlalchemy import select
 from starlette import status
 
+from auth_app import get_current_active_user
 from auth_app.schemes import UserResponse
-from db.models import ReviewModel, ReviewStatusModel, ReviewTagModel, ReviewTagReviewModel
+from db.models import ReviewModel, ReviewStatusModel, ReviewTagModel, ReviewTagReviewModel, UserModel
 from db.services.main_services import ReviewService
+from services.gpt_services import text_verification
 from .schemes import ReviewPayload, ReviewResponse, ReviewDetailResponse, OwnerResponse
 from typing import List, Optional
+
+from .services import verify_review_description
 
 router = APIRouter(
     prefix="/reviews",
@@ -17,12 +21,12 @@ router = APIRouter(
 
 @router.get("", response_model=List[ReviewResponse])
 async def get_all_reviews(
-    user_id: Optional[int] = Query(None),
-    owner_id: Optional[int] = Query(None)
+        user_id: Optional[int] = Query(None),
+        owner_id: Optional[int] = Query(None)
 ):
     query = (
         select(ReviewModel)
-        .options(
+            .options(
             joinedload(ReviewModel.tags),
             joinedload(ReviewModel.review_status),
             joinedload(ReviewModel.owner),
@@ -73,15 +77,16 @@ async def get_all_reviews(
         for review in reviews
     ]
 
+
 @router.get("/{id}", response_model=ReviewResponse)
 async def get_review_by_id(id: int):
     query = (
         select(ReviewModel)
-        .options(
+            .options(
             joinedload(ReviewModel.tags),
             joinedload(ReviewModel.review_status)
         )
-        .where(ReviewModel.id == id)
+            .where(ReviewModel.id == id)
     )
 
     result = await ReviewService.execute(query)
@@ -104,9 +109,12 @@ async def get_review_by_id(id: int):
 
 
 @router.post("", response_model=ReviewResponse)
-async def create_review(payload: ReviewPayload):
+async def create_review(
+        payload: ReviewPayload,
+        user: UserModel = Depends(get_current_active_user)
+):
     # 🚫 Забороняємо писати відгук самому собі
-    if payload.user_id == payload.owner_id:
+    if payload.user_id == payload.owner_id:  # TODO розібратись хто овнер відгука: user_id чи owner_id
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot leave a review for yourself."
@@ -123,6 +131,8 @@ async def create_review(payload: ReviewPayload):
             detail="Review from this user to this owner already exists"
         )
 
+    await verify_review_description(payload.description)
+
     async with ReviewService.session_maker() as session:
         # ✅ Створюємо відгук
         review = ReviewModel(
@@ -130,7 +140,7 @@ async def create_review(payload: ReviewPayload):
             owner_id=payload.owner_id,
             rating=payload.rating,
             description=payload.description,
-            review_status_id=payload.review_status_id,
+            review_status_id=2,
         )
         session.add(review)
         await session.flush()
@@ -142,8 +152,8 @@ async def create_review(payload: ReviewPayload):
     # ✅ Повторно завантажуємо review разом з тегами
     query = (
         select(ReviewModel)
-        .options(joinedload(ReviewModel.tags))
-        .where(ReviewModel.id == review.id)
+            .options(joinedload(ReviewModel.tags))
+            .where(ReviewModel.id == review.id)
     )
     result = await ReviewService.execute(query)
     review = result[0] if result else None
@@ -159,11 +169,18 @@ async def create_review(payload: ReviewPayload):
         tags=[tag.name for tag in review.tags]
     )
 
+
 @router.put("/{id}", response_model=ReviewResponse)
-async def update_review(id: int, payload: ReviewPayload):
+async def update_review(
+        id: int,
+        payload: ReviewPayload,
+        user: UserModel = Depends(get_current_active_user)
+):
     review = await ReviewService.select_one(ReviewModel.id == id)
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
+
+    await verify_review_description(payload.description)
 
     for key, value in payload.model_dump().items():
         setattr(review, key, value)
@@ -173,7 +190,10 @@ async def update_review(id: int, payload: ReviewPayload):
 
 
 @router.delete("/{id}")
-async def delete_review(id: int):
+async def delete_review(
+        id: int,
+        user: UserModel = Depends(get_current_active_user)
+):
     review = await ReviewService.select_one(ReviewModel.id == id)
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
