@@ -1,7 +1,6 @@
 import shutil
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File, Depends, status
@@ -13,9 +12,9 @@ from db.models import ListingModel, ImageModel, ListingTagModel, UserModel
 from db.services.main_services import ListingService, UserService
 from listing_tag_app.schemes import ListingTagShort
 from services.gpt_services import ownership_documents_verification, text_verification
-from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse
+from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse, UPLOAD_DIR, \
+    ACTIVE_STATUS_ID, ARCHIVED_STATUS_ID
 
-UPLOAD_DIR = Path("static/listing_photos")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 router = APIRouter(
     prefix="/listing",
@@ -421,8 +420,6 @@ async def delete_listing(id: int):
     await ListingService.delete(id=id)
     return {"status": "ok"}
 
-ACTIVE_STATUS_ID = 1
-ARCHIVED_STATUS_ID = 2
 
 @router.put("/{id}/archive")
 async def archive_listing(id: int):

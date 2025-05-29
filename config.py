@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     MODERATOR_ASSISTANT_ID: str
     OWNERSHIP_VERIFICATION_ASSISTANT_ID: str
 
+    EMAIL_SMTP_SERVER: str = "smtp.gmail.com"
+    EMAIL_SMTP_PORT: int = 587
+    EMAIL_LOGIN: str
+    EMAIL_PASSWORD: str
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

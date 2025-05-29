@@ -4,13 +4,31 @@ from fastapi import FastAPI, APIRouter, Depends
 from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 
-import auth_app, listing_app, review_app, review_tag_app, heating_type_app, \
-    listing_type_app, listing_tag_category_app, listing_tag_app, \
-    favorites_app, admin_app, location_app, listing_status_app
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+import admin_app
+import auth_app
+import favorites_app
+import heating_type_app
+import listing_app
+import listing_status_app
+import listing_tag_app
+import listing_tag_category_app
+import listing_type_app
+import location_app
+import review_app
+import review_tag_app
+from services.worker_checking_listing_relevance import worker_checking_listing_relevance
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(worker_checking_listing_relevance, CronTrigger(hour=12, minute=0))
+    scheduler.start()
+
+    await worker_checking_listing_relevance()
     yield
 
 

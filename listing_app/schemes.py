@@ -1,8 +1,14 @@
+from pathlib import Path
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
 from listing_tag_app.schemes import ListingTagShort
+
+
+UPLOAD_DIR = Path("static/listing_photos")
+ACTIVE_STATUS_ID = 1
+ARCHIVED_STATUS_ID = 2
 
 
 class ListingPayload(BaseModel):
@@ -91,9 +97,4 @@ class ListingDetailResponse(BaseModel):
     tags: List[str] = []
     images: list[str] = []
     discard_reason: Optional[str] = None
-
-
-
-
-
 
