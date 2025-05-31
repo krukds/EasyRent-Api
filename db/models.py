@@ -84,6 +84,7 @@ class ListingModel(Base):
     street = relationship("StreetModel", back_populates="listings")
 
 
+
 class ImageModel(Base):
     __tablename__ = "image"
     id = Column(Integer, primary_key=True)

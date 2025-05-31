@@ -73,12 +73,10 @@ class ListingService(BaseService[ListingModel]):
     @classmethod
     async def update_tags_for_listing(cls, listing_id: int, new_tag_ids: List[int]):
         async with cls.session_maker() as session:
-            # 1. Видалити старі зв'язки
             await session.execute(
                 delete(ListingTagListingModel).where(ListingTagListingModel.listing_id == listing_id)
             )
 
-            # 2. Додати нові
             if new_tag_ids:
                 insert_data = [
                     {"listing_id": listing_id, "listing_tag_id": tag_id}

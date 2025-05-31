@@ -42,9 +42,11 @@ async def get_all_listings(
     heating_type_id: Optional[int] = Query(None),
     listing_type_id: Optional[int] = Query(None),
     status_id: Optional[int] = Query(None),
-    tag_ids: Optional[List[int]] = Query(None),
+    tag_ids: Optional[str] = Query(None),
     sort_by: str = Query("price_desc")
 ):
+    if tag_ids is not None:
+        tag_ids = list(map(int, tag_ids.split(",")))
     query = (
         select(ListingModel)
         .options(

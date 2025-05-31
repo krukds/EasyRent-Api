@@ -65,7 +65,6 @@ async def signup(
             detail="This email is already used"
         )
 
-    # ✅ Перевірка телефону
     existing_user_by_phone = await UserService.select_one(
         UserModel.phone == payload.phone
     )
@@ -143,7 +142,7 @@ async def get_user_by_email(
     return UserResponse(**user.__dict__)
 
 
-@router.delete("/id")
+@router.delete("/me")
 async def delete_me(
         user: UserModel = Depends(get_current_active_user)
 ):
@@ -152,8 +151,8 @@ async def delete_me(
     return {"status": "ok"}
 
 
-@router.put("/id")
-async def update_user(
+@router.put("/me")
+async def update_me(
         payload: UserPayload,
         user: UserModel = Depends(get_current_active_user)
 ) -> UserResponse:
@@ -205,7 +204,7 @@ async def get_all_users(
     # ]
 
 
-@router.post("/upload-photo", response_model=UserResponse)
+@router.post("/me/upload-photo", response_model=UserResponse)
 async def upload_user_photo(
         file: UploadFile = File(...),
         user: UserModel = Depends(get_current_active_user)
@@ -224,7 +223,7 @@ async def upload_user_photo(
     return UserResponse(**updated_user.__dict__)
 
 
-@router.post("/upload-passport", response_model=UserResponse)
+@router.post("/me/upload-passport", response_model=UserResponse)
 async def upload_user_passport(
         file: UploadFile = File(...),
         user: UserModel = Depends(get_current_active_user)

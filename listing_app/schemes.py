@@ -98,3 +98,5 @@ class ListingDetailResponse(BaseModel):
     images: list[str] = []
     discard_reason: Optional[str] = None
 
+
+

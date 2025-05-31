@@ -37,18 +37,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Дозволені origins
+
 origins = [
-    "http://localhost:4200",  # Дозволити Angular додаток
+    "http://localhost:4200",
 ]
 
-# Додавання CORS middleware
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Дозволені origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Дозволити всі методи (GET, POST, PUT, DELETE, і т.д.)
-    allow_headers=["*"],  # Дозволити всі заголовки
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
