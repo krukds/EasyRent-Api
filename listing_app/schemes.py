@@ -9,6 +9,8 @@ from listing_tag_app.schemes import ListingTagShort
 UPLOAD_DIR = Path("static/listing_photos")
 ACTIVE_STATUS_ID = 1
 ARCHIVED_STATUS_ID = 2
+MODERATION_STATUS_ID = 3
+DISCARD_STATUS_ID = 4
 
 
 class ListingPayload(BaseModel):

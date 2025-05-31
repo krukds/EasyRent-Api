@@ -6,6 +6,7 @@ from starlette.staticfiles import StaticFiles
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 import admin_app
 import auth_app
@@ -20,15 +21,17 @@ import location_app
 import review_app
 import review_tag_app
 from services.worker_checking_listing_relevance import worker_checking_listing_relevance
+from services.worker_moderate_listings import worker_moderate_listings
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(worker_checking_listing_relevance, CronTrigger(hour=12, minute=0))
+    scheduler.add_job(worker_moderate_listings, IntervalTrigger(minutes=1))
     scheduler.start()
 
-    await worker_checking_listing_relevance()
+    await worker_moderate_listings()
     yield
 
 

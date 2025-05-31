@@ -10,7 +10,7 @@ from services.mailing import send_email_async
 
 
 async def worker_checking_listing_relevance():
-    print(f"[{datetime.datetime.now()}] Worker запущений")
+    print(f"[{datetime.datetime.now()}] worker_checking_listing_relevance запущений")
     now = datetime.datetime.utcnow()
     listings = await ListingService.select(
         func.date(ListingModel.created_at) == (now - datetime.timedelta(days=15)).date(),

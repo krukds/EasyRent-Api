@@ -13,7 +13,7 @@ from db.services.main_services import ListingService, UserService
 from listing_tag_app.schemes import ListingTagShort
 from services.gpt_services import ownership_documents_verification, text_verification
 from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse, UPLOAD_DIR, \
-    ACTIVE_STATUS_ID, ARCHIVED_STATUS_ID
+    ACTIVE_STATUS_ID, ARCHIVED_STATUS_ID, MODERATION_STATUS_ID
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 router = APIRouter(
@@ -228,7 +228,7 @@ async def create_listing(
         # owner_id: int = Form(...),
         heating_type_id: int = Form(...),
         listing_type_id: int = Form(...),
-        listing_status_id: int = Form(...),
+        # listing_status_id: int = Form(...),
         tag_ids: Optional[str] = Form(None),
         images: List[UploadFile] = File(...),
         document_ownership: UploadFile = File(...),
@@ -241,30 +241,9 @@ async def create_listing(
     if len(images) < 4:
         raise HTTPException(status_code=400, detail="Повинно бути щонайменше 4 фотографії")
 
-    # Ownership Verification
     document_ownership_path = UPLOAD_DIR / f"{time.time()}-{document_ownership.filename}"
     with open(document_ownership_path, "wb") as f:
         shutil.copyfileobj(document_ownership.file, f)
-    verification_result = await ownership_documents_verification(
-        user.first_name,
-        user.last_name,
-        user.patronymic,
-        user.birth_date,
-        str(document_ownership_path)
-    )
-    if not verification_result.valid or not verification_result.belongs_to_user or verification_result.error_details:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ваше фото документу 'Право власності' не пройшло модерацію. Причина: {verification_result.error_details or '-'}"
-        )
-
-    # Content Verification
-    verification_result = await text_verification(f"Оголошення про нерухомість:\n{name}\n{description}")
-    if not verification_result.is_ok:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ваше оголошення не пройшло модерацію. Причина: {verification_result.reason_details or '-'}"
-        )
     
     # Парсимо список тегів
     parsed_tag_ids = [int(tag.strip()) for tag in tag_ids.split(",")] if tag_ids else []
@@ -296,9 +275,10 @@ async def create_listing(
             owner_id=user.id,
             heating_type_id=heating_type_id,
             listing_type_id=listing_type_id,
-            listing_status_id=listing_status_id,
+            listing_status_id=MODERATION_STATUS_ID,
             created_at=datetime.utcnow(),
             discard_reason=null,
+            document_ownership_path=str(document_ownership_path)
         )
         session.add(listing)
         await session.flush()
@@ -375,6 +355,7 @@ async def update_listing(id: int, payload: ListingPayload):
         # Оновлюємо поля (крім tag_ids)
         for key, value in payload.model_dump(exclude={"tag_ids"}).items():
             setattr(listing, key, value)
+        listing.listing_status_id = MODERATION_STATUS_ID
 
         await session.commit()
 

@@ -72,6 +72,7 @@ class ListingModel(Base):
     listing_type_id = Column(Integer, ForeignKey("listing_type.id", ondelete="SET NULL"))
     listing_status_id = Column(Integer, ForeignKey("listing_status.id", ondelete="SET NULL"))
     discard_reason = Column(String)
+    document_ownership_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("UserModel", backref="listings", foreign_keys=[owner_id])
