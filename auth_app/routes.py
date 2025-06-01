@@ -14,7 +14,7 @@ from db import UserModel
 from db.services import UserService
 from services.gpt_services import passport_documents_verification
 from .deps import get_current_active_user, get_admin_user
-from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload
+from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload, UserDetailResponse
 from .utils import create_user_session, build_user_response, hash_password, verify_password
 
 UPLOAD_DIR = Path("static/user_photos")
@@ -171,37 +171,31 @@ async def update_me(
     return await build_user_response(user)
 
 
-@router.get("", response_model=List[UserResponse])
+@router.get("", response_model=List[UserDetailResponse])
 async def get_all_users(
-        user: UserModel = Depends(get_admin_user)
-) -> List[UserResponse]:
-    base_query = select(UserModel)
-
-    # if location_id is not None:
-    #     base_query = base_query.where(UserModel.location_id == location_id)
-    #
-    # if department_id is not None:
-    #     base_query = base_query.where(UserModel.department_id == department_id)
-
+    admin_user: UserModel = Depends(get_admin_user)
+) -> List[UserDetailResponse]:
+    base_query = select(UserModel).where(UserModel.role == 1)
     users = await UserService.execute(base_query)
 
     if not users:
         raise HTTPException(status_code=404, detail="No users found")
 
-    return users
-    # return [
-    #     UserDetailResponse(
-    #         id=user.id,
-    #         email=user.email,
-    #         password=user.password,
-    #         first_name=user.first_name,
-    #         last_name=user.last_name,
-    #         phone=user.phone,
-    #         location=user.location.name,
-    #         department=user.department.name
-    #     )
-    #     for user in users
-    # ]
+    result = []
+    for user in users:
+        rating_data = await UserService.get_user_rating_stats(user.id)
+        listing_count = await UserService.get_user_listing_count(user.id)
+
+        user_response = UserDetailResponse(
+            **user.__dict__,
+            average_rating=round(rating_data["average_rating"], 2) if rating_data["average_rating"] else None,
+            reviews_count=rating_data["reviews_count"],
+            listing_count=listing_count
+        )
+        result.append(user_response)
+
+    return result
+
 
 
 @router.post("/me/upload-photo", response_model=UserResponse)

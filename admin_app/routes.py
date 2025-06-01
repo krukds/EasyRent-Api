@@ -50,7 +50,7 @@ async def get_users_for_admin(
     last_name: Optional[str] = Query(None),
     _: UserModel = Depends(get_admin_user)  # Перевірка, що адмін
 ):
-    query = select(UserModel)
+    query = select(UserModel).where(UserModel.role == 1)
 
     if id:
         query = query.where(UserModel.id == id)

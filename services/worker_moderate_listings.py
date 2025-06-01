@@ -2,7 +2,7 @@ import datetime
 
 from db.models import ListingModel
 from db.services.main_services import ListingService, UserService
-from listing_app.schemes import MODERATION_STATUS_ID, DISCARD_STATUS_ID
+from listing_app.schemes import MODERATION_STATUS_ID, DISCARD_STATUS_ID, ACTIVE_STATUS_ID
 from services.gpt_services import ownership_documents_verification, text_verification
 
 
@@ -47,3 +47,5 @@ async def worker_moderate_listings():
             )
             continue
 
+        listing.listing_status_id = ACTIVE_STATUS_ID
+        await ListingService.save(listing)

@@ -168,10 +168,14 @@ async def get_listing_by_id(id: int):
     result = await ListingService.execute(query)
     listing = result[0] if result else None
 
-    rating_data = await UserService.get_user_rating_stats(listing.owner.id)
-
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
+
+    # Якщо owner є — отримаємо рейтинг, інакше None
+    rating_data = (
+        await UserService.get_user_rating_stats(listing.owner.id)
+        if listing.owner else {"average_rating": 0.0, "reviews_count": 0}
+    )
 
     return ListingDetailResponse(
         id=listing.id,
@@ -210,7 +214,7 @@ async def get_listing_by_id(id: int):
     )
 
 
-@router.post("", response_model=ListingDetailResponse)
+@router.post("")
 async def create_listing(
         name: str = Form(...),
         description: str = Form(...),
@@ -238,8 +242,8 @@ async def create_listing(
     if not user.is_verified:
         raise HTTPException(status_code=400, detail="Ви повинні бути верифікованими")
 
-    if len(images) < 4:
-        raise HTTPException(status_code=400, detail="Повинно бути щонайменше 4 фотографії")
+    if len(images) < 5:
+        raise HTTPException(status_code=400, detail="Повинно бути щонайменше 5 фотографій")
 
     document_ownership_path = UPLOAD_DIR / f"{time.time()}-{document_ownership.filename}"
     with open(document_ownership_path, "wb") as f:
@@ -277,7 +281,7 @@ async def create_listing(
             listing_type_id=listing_type_id,
             listing_status_id=MODERATION_STATUS_ID,
             created_at=datetime.utcnow(),
-            discard_reason=null,
+            discard_reason=None,
             document_ownership_path=str(document_ownership_path)
         )
         session.add(listing)
@@ -306,30 +310,8 @@ async def create_listing(
             .where(ListingModel.id == listing.id)
         )
         full_listing = result.unique().scalar_one()
-
-        return ListingDetailResponse(
-            **{
-                key: value
-                for key, value in full_listing.__dict__.items()
-                if key not in {
-                    "_sa_instance_state",
-                    "tags", "listing_type", "heating_type", "listing_status", "images", "owner"
-                }
-            },
-            tags=[tag.name for tag in full_listing.tags],
-            listing_type=full_listing.listing_type.name if full_listing.listing_type else None,
-            heating_type=full_listing.heating_type.name if full_listing.heating_type else None,
-            listing_status=full_listing.listing_status.name if full_listing.listing_status else None,
-            images=[img.image_url for img in full_listing.images],
-            owner=UserShortResponse(
-                id=full_listing.owner.id,
-                email=full_listing.owner.email,
-                first_name=full_listing.owner.first_name,
-                last_name=full_listing.owner.last_name,
-                phone=full_listing.owner.phone,
-                photo_url=full_listing.owner.photo_url,
-            ) if full_listing.owner else None
-        )
+        print(full_listing.__dict__)
+        return {"status": True}
 
 
 @router.put("/{id}", response_model=ListingDetailResponse)
@@ -415,7 +397,7 @@ async def archive_listing(id: int):
     print(f"Executing: UPDATE listing SET listing_status_id = {ARCHIVED_STATUS_ID} WHERE id = {id}")
 
     result = await ListingService.execute(query, commit=True)
-    archived_listing_id = result.first()
+    archived_listing_id = result[0] if result else None
 
     if archived_listing_id is None:
         raise HTTPException(status_code=404, detail="Listing not found")
@@ -437,7 +419,7 @@ async def activate_listing(id: int):
     print(f"Executing: UPDATE listing SET listing_status_id = {ACTIVE_STATUS_ID} WHERE id = {id}")
 
     result = await ListingService.execute(query, commit=True)
-    activated_listing_id = result.first()
+    activated_listing_id = result[0] if result else None
 
     if activated_listing_id is None:
         raise HTTPException(status_code=404, detail="Listing not found")

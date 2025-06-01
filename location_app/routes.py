@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from db.models import CityModel, StreetModel
 from db.services.main_services import CityService, StreetService
 from location_app.data import TOP_CITIES_FULL_EN, TOP_CITIES_FULL
-from location_app.schemes import CityOut, StreetOut
+from location_app.schemes import CityOut, StreetOut, StreetShort
 
 router = APIRouter(prefix="/location", tags=["Location"])
 
@@ -35,7 +35,7 @@ async def get_cities_ukr(q: str = Query("", max_length=50)):
     result = await CityService.execute(query)
     return [{"id": row.id, "name": row.name_ukr, "oblast": row.oblast} for row in result]
 
-@router.get("/cities-ukr/{city_id}/streets", response_model=List[str])
+@router.get("/cities-ukr/{city_id}/streets", response_model=List[StreetShort])
 async def get_streets(
     city_id: int,
     q: str = Query("", max_length=50)
@@ -45,18 +45,19 @@ async def get_streets(
         raise HTTPException(status_code=404, detail="City with specified oblast not found")
 
     if q.strip():
+        cleaned_name = func.regexp_replace(StreetModel.name_ukr, r'^(вул\.|пров\.)\s*', '', 'i')
         rows = await StreetService.select(
-            StreetModel.name_ukr.ilike(f"%{q}%".lower()),
+            cleaned_name.ilike(f"{q.lower()}%"),
             city_id=city_id,
             order_by="name_ukr"
         )
-
     else:
         rows = await StreetService.select(city_id=city_id, order_by="name_ukr")
 
-    return [row.name_ukr for row in rows]
+    return [StreetShort(id=row.id, name_ukr=row.name_ukr) for row in rows]
 
-@router.get("/api/street/{street_id}", response_model=StreetOut)
+
+@router.get("/street/{street_id}", response_model=StreetOut)
 async def get_street_by_id(street_id: int):
     query = (
         select(StreetModel)
@@ -73,3 +74,22 @@ async def get_street_by_id(street_id: int):
         raise HTTPException(status_code=404, detail="Street not found")
 
     return street
+
+@router.get("/city/{city_id}", response_model=CityOut)
+async def get_city_by_id(city_id: int):
+    query = (
+        select(CityModel)
+        .where(CityModel.id == city_id)
+    )
+
+    result = await CityService.execute(query)
+    city = result[0] if result else None
+
+    if not city:
+        raise HTTPException(status_code=404, detail="City not found")
+
+    return {
+            "id": city.id,
+            "name": city.name_ukr,
+            "oblast": city.oblast
+        }

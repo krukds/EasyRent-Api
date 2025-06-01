@@ -31,12 +31,12 @@ class UserService(BaseService[UserModel]):
     async def get_user_rating_stats(cls, user_id: int) -> dict:
         async with cls.session_maker() as session:
             # Середній рейтинг
-            avg_rating_query = select(func.avg(ReviewModel.rating)).where(ReviewModel.owner_id == user_id)
+            avg_rating_query = select(func.avg(ReviewModel.rating)).where(ReviewModel.user_id == user_id)
             avg_rating_result = await session.execute(avg_rating_query)
             avg_rating = avg_rating_result.scalar()
 
             # Кількість відгуків
-            count_query = select(func.count()).select_from(ReviewModel).where(ReviewModel.owner_id == user_id)
+            count_query = select(func.count()).select_from(ReviewModel).where(ReviewModel.user_id == user_id)
             count_result = await session.execute(count_query)
             review_count = count_result.scalar()
 
@@ -44,6 +44,15 @@ class UserService(BaseService[UserModel]):
                 "average_rating": float(avg_rating) if avg_rating is not None else None,
                 "reviews_count": review_count or 0,
             }
+
+    @staticmethod
+    async def get_user_listing_count(user_id: int) -> int:
+        async with async_session_maker() as session:
+            result = await session.execute(
+                select(func.count()).select_from(ListingModel).where(ListingModel.owner_id == user_id)
+            )
+            count = result.scalar()
+            return count or 0
 
 
 class SessionService(BaseService[SessionModel]):

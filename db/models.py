@@ -24,6 +24,18 @@ class UserModel(Base):
     is_verified = Column(Boolean, default=False)
     passport_path = Column(String)
 
+    reviews_written = relationship(
+        "ReviewModel",
+        back_populates="user",
+        foreign_keys="ReviewModel.user_id"
+    )
+
+    reviews_about_me = relationship(
+        "ReviewModel",
+        back_populates="owner",
+        foreign_keys="ReviewModel.owner_id"
+    )
+
 
 class SessionModel(Base):
     __tablename__ = "session"
@@ -113,8 +125,17 @@ class ReviewModel(Base):
 
     review_status = relationship("ReviewStatusModel", backref="reviews")
     tags = relationship("ReviewTagModel", secondary="review_tag_review", backref="reviews")
-    owner = relationship("UserModel", foreign_keys=[owner_id], backref="reviews_about_me")
-    user = relationship("UserModel", foreign_keys=[user_id], backref="my_written_reviews")
+    owner = relationship(
+        "UserModel",
+        foreign_keys=[owner_id],
+        back_populates="reviews_about_me"
+    )
+
+    user = relationship(
+        "UserModel",
+        foreign_keys=[user_id],
+        back_populates="reviews_written"
+    )
 
     __table_args__ = (UniqueConstraint('user_id', 'owner_id', name='uq_user_owner_review'),)
 

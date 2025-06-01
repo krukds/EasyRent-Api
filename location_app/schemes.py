@@ -10,3 +10,7 @@ class StreetOut(BaseModel):
     name_ukr: str
     name_eng: str
     city_id: int
+
+class StreetShort(BaseModel):
+    id: int
+    name_ukr: str

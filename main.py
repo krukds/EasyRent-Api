@@ -28,10 +28,9 @@ from services.worker_moderate_listings import worker_moderate_listings
 async def lifespan(_: FastAPI):
     scheduler = AsyncIOScheduler()
     scheduler.add_job(worker_checking_listing_relevance, CronTrigger(hour=12, minute=0))
-    scheduler.add_job(worker_moderate_listings, IntervalTrigger(minutes=1))
+    scheduler.add_job(worker_moderate_listings, IntervalTrigger(seconds=10))
     scheduler.start()
 
-    await worker_moderate_listings()
     yield
 
 

@@ -54,3 +54,7 @@ class UserPayload(BaseModel):
     photo_url: Optional[str] = None
     passport_path: Optional[str] = None
     role: Optional[int] = None
+
+
+class UserDetailResponse(UserResponse):
+    listing_count: int
