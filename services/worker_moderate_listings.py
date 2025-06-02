@@ -1,9 +1,9 @@
 import datetime
 
 from db.models import ListingModel
-from db.services.main_services import ListingService, UserService
+from db.services.main_services import ListingService, UserService, CityService, StreetService, ImageService
 from listing_app.schemes import MODERATION_STATUS_ID, DISCARD_STATUS_ID, ACTIVE_STATUS_ID
-from services.gpt_services import ownership_documents_verification, text_verification
+from services.gpt_services import ownership_documents_verification, text_and_image_verification
 
 
 async def discard_listing_service(listing: ListingModel, discard_reason: str):
@@ -19,12 +19,18 @@ async def worker_moderate_listings():
     )
     for listing in listings:
         user = await UserService.select_one(id=listing.owner_id)
+        city = await CityService.select_one(id=listing.city_id)
+        street = await StreetService.select_one(id=listing.street_id)
+        images = await ImageService.select(listing_id=listing.id)
 
         if not listing.document_ownership_path or not listing.name or not listing.description:
             continue
 
         # Content Verification
-        verification_result = await text_verification(f"Оголошення про нерухомість:\n{listing.name}\n{listing.description}")
+        verification_result = await text_and_image_verification(
+            f"Оголошення про нерухомість:\n{listing.name}\n{listing.description}",
+            [f"static/listing_photos/{image.image_url}" for image in images]
+        )
         if not verification_result.is_ok:
             await discard_listing_service(
                 listing,
@@ -38,7 +44,9 @@ async def worker_moderate_listings():
             user.last_name,
             user.patronymic,
             user.birth_date,
-            listing.document_ownership_path
+            listing.document_ownership_path,
+            city.name_ukr,
+            street.name_ukr,
         )
         if not verification_result.valid or not verification_result.belongs_to_user or verification_result.error_details:
             await discard_listing_service(

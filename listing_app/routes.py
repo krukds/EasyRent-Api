@@ -3,15 +3,14 @@ import time
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File, Depends, status
-from sqlalchemy import select, update, null
+from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File, Depends
+from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 
 from auth_app import get_current_active_user
 from db.models import ListingModel, ImageModel, ListingTagModel, UserModel
 from db.services.main_services import ListingService, UserService
 from listing_tag_app.schemes import ListingTagShort
-from services.gpt_services import ownership_documents_verification, text_verification
 from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse, UPLOAD_DIR, \
     ACTIVE_STATUS_ID, ARCHIVED_STATUS_ID, MODERATION_STATUS_ID
 

@@ -7,7 +7,7 @@ from auth_app import get_current_active_user
 from auth_app.schemes import UserResponse
 from db.models import ReviewModel, ReviewStatusModel, ReviewTagModel, ReviewTagReviewModel, UserModel
 from db.services.main_services import ReviewService
-from services.gpt_services import text_verification
+from services.gpt_services import text_and_image_verification
 from .schemes import ReviewPayload, ReviewResponse, ReviewDetailResponse, OwnerResponse
 from typing import List, Optional
 

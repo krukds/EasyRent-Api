@@ -6,7 +6,7 @@ from services import gpt_services
 from services.gpt_services import (
     passport_documents_verification,
     ownership_documents_verification,
-    text_verification,
+    text_and_image_verification,
     IdVerificationGptResult,
     OwnershipVerificationGptResult,
     TextVerificationGptResult
@@ -71,6 +71,6 @@ async def test_text_verification_success():
 
     with patch.object(gpt_services.client.beta.threads, "create", new=AsyncMock(return_value=MagicMock(id="thread-id"))),              patch.object(gpt_services.client.beta.threads.messages, "create", new=AsyncMock()),              patch.object(gpt_services.client.beta.threads.runs, "create", new=AsyncMock(return_value=MagicMock(id="run-id"))),              patch.object(gpt_services.client.beta.threads.runs, "retrieve", new=AsyncMock(return_value=MagicMock(status="completed"))),              patch.object(gpt_services.client.beta.threads.messages, "list", new=AsyncMock(return_value=MagicMock(data=[MagicMock(role="assistant", content=[MagicMock(text=MagicMock(value=json.dumps(fake_response)))])]))):
 
-        result = await text_verification("some clean input text")
+        result = await text_and_image_verification("some clean input text")
         assert isinstance(result, TextVerificationGptResult)
         assert result.is_ok is True

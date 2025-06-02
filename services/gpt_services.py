@@ -92,7 +92,9 @@ async def ownership_documents_verification(
         owner_second_name: str,
         owner_patronymic: str,
         owner_birth_date: str,
-        document_ownership_path: str
+        document_ownership_path: str,
+        city: str,
+        street: str,
 ) -> OwnershipVerificationGptResult:
     openai_document_ids = []
     with open(document_ownership_path, "rb") as f:
@@ -111,6 +113,8 @@ async def ownership_documents_verification(
                     f"Second name: {owner_second_name}\n"
                     f"Patronymic: {owner_patronymic}\n"
                     f"Birth date: {owner_birth_date}\n"
+                    f"City: {city}\n"
+                    f"Street: {street}\n"
                     "Validate document ownership and return json"
         }
     ]
@@ -151,7 +155,21 @@ async def ownership_documents_verification(
     return OwnershipVerificationGptResult()
 
 
-async def text_verification(text: str) -> TextVerificationGptResult:
+async def text_and_image_verification(
+        text: str,
+        image_paths=None
+) -> TextVerificationGptResult:
+    if image_paths is None:
+        image_paths = []
+
+    openai_document_ids = []
+    for image_path in image_paths:
+        with open(image_path, "rb") as f:
+            image_file = await client.files.create(
+                file=f,
+                purpose="assistants"
+            )
+            openai_document_ids.append(image_file.id)
 
     thread = await client.beta.threads.create()
 
@@ -161,6 +179,10 @@ async def text_verification(text: str) -> TextVerificationGptResult:
             "text": f"Input text: {text}"
         }
     ]
+    message_contents += [{
+        "type": "image_file",
+        "image_file": {"file_id": item}
+    } for item in openai_document_ids]
 
     await client.beta.threads.messages.create(
         thread_id=thread.id,
