@@ -40,7 +40,7 @@ async def login(
     if user is None or not verify_password(payload.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Incorrect email or password"
+            detail="Неправильний email чи пароль"
         )
 
     session = await create_user_session(user.id)
@@ -62,7 +62,7 @@ async def signup(
     if user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This email is already used"
+            detail="Користувач з таким email вже зареєстрований"
         )
 
     existing_user_by_phone = await UserService.select_one(
@@ -71,7 +71,7 @@ async def signup(
     if existing_user_by_phone:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This phone number is already used"
+            detail="Користувач з таким номером телефону вже зареєстрований"
         )
 
     payload_data = payload.model_dump()
@@ -129,17 +129,17 @@ async def get_user_by_id(
     )
 
 
-@router.get("/email")
-async def get_user_by_email(
-        email: str
-) -> UserResponse:
-    user: UserModel = await UserService.select_one(
-        UserModel.email == email
-    )
-    if not user:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No user with this email found")
-
-    return UserResponse(**user.__dict__)
+# @router.get("/email")
+# async def get_user_by_email(
+#         email: str
+# ) -> UserResponse:
+#     user: UserModel = await UserService.select_one(
+#         UserModel.email == email
+#     )
+#     if not user:
+#         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="No user with this email found")
+#
+#     return UserResponse(**user.__dict__)
 
 
 @router.delete("/me")
@@ -170,32 +170,32 @@ async def update_me(
 
     return await build_user_response(user)
 
-
-@router.get("", response_model=List[UserDetailResponse])
-async def get_all_users(
-    admin_user: UserModel = Depends(get_admin_user)
-) -> List[UserDetailResponse]:
-    base_query = select(UserModel).where(UserModel.role == 1)
-    users = await UserService.execute(base_query)
-
-    if not users:
-        raise HTTPException(status_code=404, detail="No users found")
-
-    result = []
-    for user in users:
-        rating_data = await UserService.get_user_rating_stats(user.id)
-        listing_count = await UserService.get_user_listing_count(user.id)
-
-        user_response = UserDetailResponse(
-            **user.__dict__,
-            average_rating=round(rating_data["average_rating"], 2) if rating_data["average_rating"] else None,
-            reviews_count=rating_data["reviews_count"],
-            listing_count=listing_count
-        )
-        result.append(user_response)
-
-    return result
-
+#
+# @router.get("", response_model=List[UserDetailResponse])
+# async def get_all_users(
+#     admin_user: UserModel = Depends(get_admin_user)
+# ) -> List[UserDetailResponse]:
+#     base_query = select(UserModel).where(UserModel.role == 1)
+#     users = await UserService.execute(base_query)
+#
+#     if not users:
+#         raise HTTPException(status_code=404, detail="No users found")
+#
+#     result = []
+#     for user in users:
+#         rating_data = await UserService.get_user_rating_stats(user.id)
+#         listing_count = await UserService.get_user_listing_count(user.id)
+#
+#         user_response = UserDetailResponse(
+#             **user.__dict__,
+#             average_rating=round(rating_data["average_rating"], 2) if rating_data["average_rating"] else None,
+#             reviews_count=rating_data["reviews_count"],
+#             listing_count=listing_count
+#         )
+#         result.append(user_response)
+#
+#     return result
+#
 
 
 @router.post("/me/upload-photo", response_model=UserResponse)

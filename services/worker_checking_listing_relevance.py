@@ -19,6 +19,9 @@ async def worker_checking_listing_relevance():
     for listing in listings:
 
         user = await UserService.select_one(id=listing.owner_id)
+        if not user:
+            continue
+
         text = f"""
 Шановний(а) користувачу,
 
