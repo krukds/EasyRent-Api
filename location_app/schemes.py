@@ -14,3 +14,9 @@ class StreetOut(BaseModel):
 class StreetShort(BaseModel):
     id: int
     name_ukr: str
+    city_name: str
+
+class StreetWithCity(BaseModel):
+    id: int
+    name_ukr: str
+    city_name: str

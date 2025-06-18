@@ -6,6 +6,7 @@ from starlette import status
 from auth_app import get_current_active_user
 from auth_app.schemes import UserResponse
 from db.models import ReviewModel, ReviewStatusModel, ReviewTagModel, ReviewTagReviewModel, UserModel
+from db.services import UserService
 from db.services.main_services import ReviewService
 from services.gpt_services import text_and_image_verification
 from .schemes import ReviewPayload, ReviewResponse, ReviewDetailResponse, OwnerResponse
@@ -113,8 +114,7 @@ async def create_review(
         payload: ReviewPayload,
         user: UserModel = Depends(get_current_active_user)
 ):
-    # 🚫 Забороняємо писати відгук самому собі
-    if payload.user_id == payload.owner_id:  # TODO розібратись хто овнер відгука: user_id чи owner_id
+    if payload.user_id == payload.owner_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot leave a review for yourself."
@@ -134,7 +134,6 @@ async def create_review(
     await verify_review_description(payload.description)
 
     async with ReviewService.session_maker() as session:
-        # ✅ Створюємо відгук
         review = ReviewModel(
             user_id=payload.user_id,
             owner_id=payload.owner_id,
@@ -144,12 +143,14 @@ async def create_review(
         )
         session.add(review)
         await session.flush()
-        await session.commit()  # Комітуємо, щоб зберегти review.id
+        await session.commit()
 
-    # ✅ Додаємо теги окремо (в новій сесії або методі)
     await ReviewService.add_tags_to_review(review.id, payload.tag_ids)
 
-    # ✅ Повторно завантажуємо review разом з тегами
+    tag_count = await ReviewService.count_total_tags_for_owner(payload.owner_id)
+    if tag_count > 5:
+        await UserService.block_user(payload.owner_id)
+
     query = (
         select(ReviewModel)
             .options(joinedload(ReviewModel.tags))

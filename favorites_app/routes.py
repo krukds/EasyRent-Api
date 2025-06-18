@@ -83,6 +83,7 @@ async def get_favorite_listings(user: UserModel = Depends(get_current_active_use
             created_at=l.created_at,
             tags=[tag.name for tag in l.tags],
             images=[img.image_url for img in l.images] if l.images else [],
+            document_ownership=l.document_ownership_path,
             discard_reason=l.discard_reason,
         )
 

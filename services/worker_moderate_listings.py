@@ -26,17 +26,18 @@ async def worker_moderate_listings():
         if not listing.document_ownership_path or not listing.name or not listing.description:
             continue
 
-        # Content Verification
-        verification_result = await text_and_image_verification(
-            f"Оголошення про нерухомість:\n{listing.name}\n{listing.description}",
-            [f"static/listing_photos/{image.image_url}" for image in images]
-        )
-        if not verification_result.is_ok:
-            await discard_listing_service(
-                listing,
-                discard_reason=f"Ваше оголошення не пройшло модерацію. Причина: {verification_result.reason_details or '-'}"
+        if True:
+            # Content Verification
+            verification_result = await text_and_image_verification(
+                f"Оголошення про нерухомість:\n{listing.name}\n{listing.description}",
+                [f"static/listing_photos/{image.image_url}" for image in images]
             )
-            continue
+            if not verification_result.is_ok:
+                await discard_listing_service(
+                    listing,
+                    discard_reason=f"Ваше оголошення не пройшло модерацію. Причина: {verification_result.reason_details or '-'}"
+                )
+                continue
 
         # Ownership Verification
         verification_result = await ownership_documents_verification(

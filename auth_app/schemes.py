@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 
 
@@ -58,3 +58,8 @@ class UserPayload(BaseModel):
 
 class UserDetailResponse(UserResponse):
     listing_count: int
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=6)

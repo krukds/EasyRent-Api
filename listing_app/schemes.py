@@ -27,13 +27,12 @@ class ListingPayload(BaseModel):
     bathrooms: Optional[int] = None
     square: int
     communal: int
-    owner_id: int
     heating_type_id: int
     listing_type_id: int
-    listing_status_id: int
+    # listing_status_id: int
     tag_ids: List[int] = []
     images: List[str]
-    discard_reason: Optional[str] = None
+    # discard_reason: Optional[str] = None
 
 
 class ListingResponse(BaseModel):
@@ -98,6 +97,7 @@ class ListingDetailResponse(BaseModel):
     created_at: datetime
     tags: List[str] = []
     images: list[str] = []
+    document_ownership: str
     discard_reason: Optional[str] = None
 
 

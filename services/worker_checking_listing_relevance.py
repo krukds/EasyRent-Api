@@ -16,8 +16,9 @@ async def worker_checking_listing_relevance():
         func.date(ListingModel.created_at) == (now - datetime.timedelta(days=15)).date(),
         listing_status_id=ACTIVE_STATUS_ID
     )
+    # print((now - datetime.timedelta(days=15)).date())
     for listing in listings:
-
+        # print(listing)
         user = await UserService.select_one(id=listing.owner_id)
         if not user:
             continue

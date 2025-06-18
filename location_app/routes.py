@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from db.models import CityModel, StreetModel
 from db.services.main_services import CityService, StreetService
 from location_app.data import TOP_CITIES_FULL_EN, TOP_CITIES_FULL
-from location_app.schemes import CityOut, StreetOut, StreetShort
+from location_app.schemes import CityOut, StreetOut, StreetShort, StreetWithCity
 
 router = APIRouter(prefix="/location", tags=["Location"])
 
@@ -31,6 +31,7 @@ async def get_cities_ukr(q: str = Query("", max_length=50)):
         select(CityModel)
         .where(CityModel.name_ukr.ilike(f"{q.lower()}%"))
         .order_by(CityModel.name_ukr)
+        .limit(100)
     )
     result = await CityService.execute(query)
     return [{"id": row.id, "name": row.name_ukr, "oblast": row.oblast} for row in result]
@@ -54,7 +55,34 @@ async def get_streets(
     else:
         rows = await StreetService.select(city_id=city_id, order_by="name_ukr")
 
-    return [StreetShort(id=row.id, name_ukr=row.name_ukr) for row in rows]
+    return [StreetShort(id=row.id, name_ukr=row.name_ukr, city_name=city.name_ukr) for row in rows]
+
+@router.get("/streets", response_model=List[StreetWithCity])
+async def get_streets_ukr(q: str = Query("", max_length=50)):
+    if q.strip():
+        cleaned_name = func.regexp_replace(StreetModel.name_ukr, r'^(вул\.|пров\.)\s*', '', 'i')
+
+        query = (
+            select(StreetModel)
+            .join(CityModel, CityModel.id == StreetModel.city_id)
+            .options(joinedload(StreetModel.city))
+            .where(cleaned_name.ilike(f"{q.lower()}%"))
+            .order_by(CityModel.name_ukr, StreetModel.name_ukr)
+            .limit(100)
+        )
+
+        rows = await StreetService.execute(query)
+
+        return [
+            {
+                "id": street.id,
+                "name_ukr": street.name_ukr,
+                "city_name": street.city.name_ukr if street.city else None
+            }
+            for street in rows
+        ]
+
+    return []
 
 
 @router.get("/street/{street_id}", response_model=StreetOut)

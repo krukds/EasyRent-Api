@@ -10,4 +10,9 @@ async def verify_review_description(description):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Ваш відгук не пройшов модерацію. Причина: {verif_result.reason_details or '-'}"
             )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Ваш відгук не пройшов модерацію. Причина: пустий"
+        )
     return True

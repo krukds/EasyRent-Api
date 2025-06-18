@@ -12,7 +12,6 @@ def send_email(to_email, subject, body):
     from_email = config.EMAIL_LOGIN
     app_password = config.EMAIL_PASSWORD
 
-    # Створюємо email
     msg = MIMEMultipart()
     msg["From"] = from_email
     msg["To"] = to_email
@@ -20,7 +19,6 @@ def send_email(to_email, subject, body):
 
     msg.attach(MIMEText(body, "plain"))
 
-    # Відправлення
     with smtplib.SMTP(smtp_server, smtp_port) as server:
         server.starttls()
         server.login(from_email, app_password)

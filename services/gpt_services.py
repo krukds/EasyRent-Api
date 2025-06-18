@@ -1,7 +1,9 @@
-import json
 import asyncio
+import json
+
 import openai
 from pydantic import BaseModel
+
 from config import config
 
 client = openai.AsyncOpenAI(
@@ -98,31 +100,31 @@ async def ownership_documents_verification(
 ) -> OwnershipVerificationGptResult:
     openai_document_ids = []
     with open(document_ownership_path, "rb") as f:
+        # try:
         image_file = await client.files.create(
             file=f,
             purpose="assistants"
         )
+        # except Exception as e:
+        #     return OwnershipVerificationGptResult(error_details=str(e))
         openai_document_ids.append(image_file.id)
 
     thread = await client.beta.threads.create()
+    # thread = await client.beta.threads.retrieve("thread_JA6FSQomLZ06ZhtVRHk8kZxT")
 
-    message_contents = [
+    message_contents = []
+    message_contents.append(
         {
             "type": "text",
-            "text": f"First name: {owner_first_name}\n"
-                    f"Second name: {owner_second_name}\n"
-                    f"Patronymic: {owner_patronymic}\n"
-                    f"Birth date: {owner_birth_date}\n"
-                    f"City: {city}\n"
-                    f"Street: {street}\n"
-                    "Validate document ownership and return json"
+            "text": f"{owner_first_name} {owner_second_name} {owner_patronymic}\n"
+                    f"City: {city}, {street}\n"
         }
-    ]
+    )
     message_contents += [{
         "type": "image_file",
         "image_file": {"file_id": item}
     } for item in openai_document_ids]
-
+    print(message_contents)
     await client.beta.threads.messages.create(
         thread_id=thread.id,
         role="user",

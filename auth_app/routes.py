@@ -14,7 +14,7 @@ from db import UserModel
 from db.services import UserService
 from services.gpt_services import passport_documents_verification
 from .deps import get_current_active_user, get_admin_user
-from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload, UserDetailResponse
+from .schemes import TokenResponse, SignupPayload, UserResponse, UserPayload, UserDetailResponse, ChangePasswordPayload
 from .utils import create_user_session, build_user_response, hash_password, verify_password
 
 UPLOAD_DIR = Path("static/user_photos")
@@ -266,3 +266,20 @@ async def upload_user_passport(
     updated_user = await UserService.save(user)
 
     return UserResponse(**updated_user.__dict__)
+
+
+@router.post("/change-password")
+async def change_password(
+    payload: ChangePasswordPayload,
+    user: UserModel = Depends(get_current_active_user)
+):
+    if not verify_password(payload.current_password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неправильний поточний пароль"
+        )
+
+    user.password = hash_password(payload.new_password)
+    await UserService.save(user)
+
+    return {"detail": "Пароль успішно змінено"}

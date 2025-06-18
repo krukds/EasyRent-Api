@@ -1,20 +1,25 @@
+import json
+import os
 import shutil
 import time
+import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Form, UploadFile, File, Depends
-from sqlalchemy import select, update
-from sqlalchemy.orm import joinedload
+from sqlalchemy import select, update, delete
+from sqlalchemy.orm import joinedload, InstrumentedAttribute, ColumnProperty
 
 from auth_app import get_current_active_user
-from db.models import ListingModel, ImageModel, ListingTagModel, UserModel
+from db.models import ListingModel, ImageModel, ListingTagModel, UserModel, ListingTagListingModel
 from db.services.main_services import ListingService, UserService
 from listing_tag_app.schemes import ListingTagShort
 from .schemes import ListingPayload, ListingResponse, ListingDetailResponse, UserShortResponse, UPLOAD_DIR, \
     ACTIVE_STATUS_ID, ARCHIVED_STATUS_ID, MODERATION_STATUS_ID
 
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = Path("static/listing_photos")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)  # Переконуємось, що папка є
 router = APIRouter(
     prefix="/listing",
     tags=["Listings"]
@@ -42,7 +47,9 @@ async def get_all_listings(
     listing_type_id: Optional[int] = Query(None),
     status_id: Optional[int] = Query(None),
     tag_ids: Optional[str] = Query(None),
-    sort_by: str = Query("price_desc")
+    sort_by: str = Query("price_desc"),
+    rooms_operator: str = Query("eq"),  # "eq" або "gte"
+    bathrooms_operator: str = Query("eq"),
 ):
     if tag_ids is not None:
         tag_ids = list(map(int, tag_ids.split(",")))
@@ -60,6 +67,10 @@ async def get_all_listings(
         query = query.order_by(ListingModel.price.desc())
     elif sort_by == "price_asc":
         query = query.order_by(ListingModel.price.asc())
+    elif sort_by == "date_desc":
+        query = query.order_by(ListingModel.created_at.desc())
+    elif sort_by == "date_asc":
+        query = query.order_by(ListingModel.created_at.asc())
     else:
         query = query.order_by(ListingModel.id.desc())
 
@@ -76,9 +87,16 @@ async def get_all_listings(
         query = query.where(ListingModel.price <= max_price)
 
     if rooms is not None:
-        query = query.where(ListingModel.rooms == rooms)
+        if rooms_operator == "gte":
+            query = query.where(ListingModel.rooms >= rooms)
+        else:
+            query = query.where(ListingModel.rooms == rooms)
+
     if bathrooms is not None:
-        query = query.where(ListingModel.bathrooms == bathrooms)
+        if bathrooms_operator == "gte":
+            query = query.where(ListingModel.bathrooms >= bathrooms)
+        else:
+            query = query.where(ListingModel.bathrooms == bathrooms)
 
     if min_floor is not None:
         query = query.where(ListingModel.floor >= min_floor)
@@ -170,7 +188,6 @@ async def get_listing_by_id(id: int):
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    # Якщо owner є — отримаємо рейтинг, інакше None
     rating_data = (
         await UserService.get_user_rating_stats(listing.owner.id)
         if listing.owner else {"average_rating": 0.0, "reviews_count": 0}
@@ -209,6 +226,7 @@ async def get_listing_by_id(id: int):
         listing_status=listing.listing_status.name if listing.listing_status else None,
         tags=[tag.name for tag in listing.tags],
         images=[img.image_url for img in listing.images] if listing.images else [],
+        document_ownership=listing.document_ownership_path,
         discard_reason=listing.discard_reason,
     )
 
@@ -248,10 +266,8 @@ async def create_listing(
     with open(document_ownership_path, "wb") as f:
         shutil.copyfileobj(document_ownership.file, f)
     
-    # Парсимо список тегів
     parsed_tag_ids = [int(tag.strip()) for tag in tag_ids.split(",")] if tag_ids else []
 
-    # Зберігаємо зображення у файлову систему
     filenames = []
     for img in images:
         file_path = UPLOAD_DIR / img.filename
@@ -259,7 +275,6 @@ async def create_listing(
             shutil.copyfileobj(img.file, f)
         filenames.append(img.filename)
 
-    # Зберігаємо оголошення та зображення в базу
     async with ListingService.session_maker() as session:
         listing = ListingModel(
             name=name,
@@ -291,89 +306,140 @@ async def create_listing(
 
         await session.commit()
 
-    # Додаємо теги
     await ListingService.add_tags_to_listing(listing.id, parsed_tag_ids)
 
-    # Завантажуємо повністю заповнений об'єкт
-    async with ListingService.session_maker() as session:
-        result = await session.execute(
-            select(ListingModel)
-            .options(
-                joinedload(ListingModel.tags),
-                joinedload(ListingModel.listing_type),
-                joinedload(ListingModel.heating_type),
-                joinedload(ListingModel.listing_status),
-                joinedload(ListingModel.images),
-                joinedload(ListingModel.owner),
-            )
-            .where(ListingModel.id == listing.id)
-        )
-        full_listing = result.unique().scalar_one()
-        print(full_listing.__dict__)
-        return {"status": True}
+    # async with ListingService.session_maker() as session:
+    #     result = await session.execute(
+    #         select(ListingModel)
+    #         .options(
+    #             joinedload(ListingModel.tags),
+    #             joinedload(ListingModel.listing_type),
+    #             joinedload(ListingModel.heating_type),
+    #             joinedload(ListingModel.listing_status),
+    #             joinedload(ListingModel.images),
+    #             joinedload(ListingModel.owner),
+    #         )
+    #         .where(ListingModel.id == listing.id)
+    #     )
+    #     # full_listing = result.unique().scalar_one()
+    #     # print(full_listing.__dict__)
+    return {"status": True}
 
 
-@router.put("/{id}", response_model=ListingDetailResponse)
-async def update_listing(id: int, payload: ListingPayload):
+@router.put("/{id}", response_model=bool)
+async def update_listing(
+    id: int,
+    name: str = Form(...),
+    description: str = Form(...),
+    price: int = Form(...),
+    city_id: int = Form(...),
+    street_id: int = Form(...),
+    building: str = Form(...),
+    flat: Optional[int] = Form(None),
+    floor: int = Form(...),
+    all_floors: int = Form(...),
+    rooms: int = Form(...),
+    bathrooms: Optional[int] = Form(None),
+    square: int = Form(...),
+    communal: int = Form(...),
+    heating_type_id: int = Form(...),
+    listing_type_id: int = Form(...),
+    tag_ids: Optional[str] = Form(None),  # JSON string: "[1, 2, 3]"
+    images: Optional[List[UploadFile]] = File(None),
+    document_ownership: Optional[UploadFile] = None,
+    user: UserModel = Depends(get_current_active_user),
+):
     async with ListingService.session_maker() as session:
-        query = (
-            select(ListingModel)
-            .options(
-                joinedload(ListingModel.tags),
-                joinedload(ListingModel.listing_type),
-                joinedload(ListingModel.heating_type),
-                joinedload(ListingModel.listing_status),
-                joinedload(ListingModel.owner)
-            )
-            .where(ListingModel.id == id)
-        )
+        query = select(ListingModel).options(
+            joinedload(ListingModel.images),
+        ).where(ListingModel.id == id)
         result = await session.execute(query)
         listing = result.unique().scalar_one_or_none()
 
         if not listing:
             raise HTTPException(status_code=404, detail="Listing not found")
 
-        # Оновлюємо поля (крім tag_ids)
-        for key, value in payload.model_dump(exclude={"tag_ids"}).items():
-            setattr(listing, key, value)
+        if listing.owner_id != user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        # Оновлення полів
+        listing.name = name
+        listing.description = description
+        listing.price = price
+        listing.city_id = city_id
+        listing.street_id = street_id
+        listing.building = building
+        listing.flat = flat
+        listing.floor = floor
+        listing.all_floors = all_floors
+        listing.rooms = rooms
+        listing.bathrooms = bathrooms
+        listing.square = square
+        listing.communal = communal
+        listing.heating_type_id = heating_type_id
+        listing.listing_type_id = listing_type_id
+        listing.created_at = datetime.utcnow()
+
+        # if has_moderation_changes(listing, name, description, images, document_ownership):
         listing.listing_status_id = MODERATION_STATUS_ID
+
+        # Оновлення документа
+        if document_ownership and document_ownership.size > 0:
+            filename = f"{int(time.time()*1000)}-{uuid.uuid4()}-{document_ownership.filename.split('\\')[-1]}"
+            if '\\' not in document_ownership.filename:
+                filename = document_ownership.filename
+            file_location = f"static/listing_photos/{filename}"
+            with open(file_location, "wb") as f:
+                shutil.copyfileobj(document_ownership.file, f)
+            listing.document_ownership_path = file_location
+
+        # Оновлення зображень
+        if images is not None:
+            await session.execute(
+                delete(ImageModel).where(ImageModel.listing_id == id)
+            )
+            for image in images:
+                image_name = f"{int(time.time()*1000)}-{uuid.uuid4()}.{image.filename.split('.')[-1]}"
+                image_path = f"static/listing_photos/{image_name}"
+                with open(image_path, "wb") as f:
+                    shutil.copyfileobj(image.file, f)
+                new_image = ImageModel(listing_id=id, image_url=image_name)
+                session.add(new_image)
 
         await session.commit()
 
-    # Оновлюємо теги (в окремій сесії)
-    await ListingService.update_tags_for_listing(id, payload.tag_ids)
+    if tag_ids:
+        parsed_tag_ids = json.loads(tag_ids)
+        await ListingService.update_tags_for_listing(id, parsed_tag_ids)
 
-    # Повторно отримуємо з усіма зв'язками
-    async with ListingService.session_maker() as session:
-        query = (
-            select(ListingModel)
-            .options(
-                joinedload(ListingModel.tags),
-                joinedload(ListingModel.listing_type),
-                joinedload(ListingModel.heating_type),
-                joinedload(ListingModel.listing_status),
-            )
-            .where(ListingModel.id == id)
-        )
-        result = await session.execute(query)
-        updated_listing = result.unique().scalar_one()
-
-    return ListingDetailResponse(
-        **{
-            key: value
-            for key, value in updated_listing.__dict__.items()
-            if key not in {
-                "tags", "_sa_instance_state",
-                "listing_type", "heating_type", "listing_status"
-            }
-        },
-        listing_type=updated_listing.listing_type.name if updated_listing.listing_type else None,
-        heating_type=updated_listing.heating_type.name if updated_listing.heating_type else None,
-        listing_status=updated_listing.listing_status.name if updated_listing.listing_status else None,
-        tags=[tag.name for tag in updated_listing.tags],
-    )
+    return True
 
 
+def has_moderation_changes(
+    listing,
+    new_name: str,
+    new_description: str,
+    images: Optional[List[UploadFile]],
+    document_ownership: Optional[UploadFile]
+) -> bool:
+    # 1. Назва або опис змінилися
+    if listing.name != new_name or listing.description != new_description:
+        return True
+
+    # 2. Фото
+    if images is not None and len(images) > 0:
+        existing_image_names = sorted(img.image_url.split('/')[-1] for img in listing.images)
+        new_image_names = sorted(image.filename for image in images)
+        if existing_image_names != new_image_names:
+            return True
+
+    # 3. Документ
+    if document_ownership:
+        current_doc_name = listing.document_ownership_path.split('/')[-1] if listing.document_ownership_path else None
+        if document_ownership.filename != current_doc_name:
+            return True
+
+    return False
 
 @router.delete("/{id}")
 async def delete_listing(id: int):
@@ -390,7 +456,10 @@ async def archive_listing(id: int):
     query = (
         update(ListingModel)
         .where(ListingModel.id == id)
-        .values(listing_status_id=ARCHIVED_STATUS_ID)
+        .values(
+            listing_status_id=ARCHIVED_STATUS_ID,
+            created_at = datetime.utcnow()
+        )
         .returning(ListingModel.id)
     )
     print(f"Executing: UPDATE listing SET listing_status_id = {ARCHIVED_STATUS_ID} WHERE id = {id}")

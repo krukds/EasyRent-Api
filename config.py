@@ -1,3 +1,5 @@
+import os
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from passlib.context import CryptContext
@@ -30,3 +32,5 @@ class Settings(BaseSettings):
 
 config = Settings()
 password_crypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+os.environ['TESSDATA_PREFIX'] = r'D:\Tesseract\Tesseract-OCR'

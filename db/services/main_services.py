@@ -1,6 +1,6 @@
 from typing import List
 
-from sqlalchemy import insert, delete, select, func
+from sqlalchemy import insert, delete, select, func, update
 
 from db.base import async_session_maker
 from db.models import (
@@ -31,12 +31,12 @@ class UserService(BaseService[UserModel]):
     async def get_user_rating_stats(cls, user_id: int) -> dict:
         async with cls.session_maker() as session:
             # Середній рейтинг
-            avg_rating_query = select(func.avg(ReviewModel.rating)).where(ReviewModel.user_id == user_id)
+            avg_rating_query = select(func.avg(ReviewModel.rating)).where(ReviewModel.owner_id == user_id)
             avg_rating_result = await session.execute(avg_rating_query)
             avg_rating = avg_rating_result.scalar()
 
             # Кількість відгуків
-            count_query = select(func.count()).select_from(ReviewModel).where(ReviewModel.user_id == user_id)
+            count_query = select(func.count()).select_from(ReviewModel).where(ReviewModel.owner_id == user_id)
             count_result = await session.execute(count_query)
             review_count = count_result.scalar()
 
@@ -53,6 +53,17 @@ class UserService(BaseService[UserModel]):
             )
             count = result.scalar()
             return count or 0
+
+    @classmethod
+    async def block_user(cls, user_id: int):
+        async with cls.session_maker() as session:
+            query = (
+                update(UserModel)
+                .where(UserModel.id == user_id)
+                .values(is_active=False)
+            )
+            await session.execute(query)
+            await session.commit()
 
 
 class SessionService(BaseService[SessionModel]):
@@ -131,6 +142,17 @@ class ReviewService(BaseService[ReviewModel]):
             )
             await session.execute(query)
             await session.commit()
+
+    @classmethod
+    async def count_total_tags_for_owner(cls, owner_id: int) -> int:
+        async with cls.session_maker() as session:
+            query = select(func.count(ReviewTagReviewModel.review_tag_id)).join(
+                ReviewModel, ReviewTagReviewModel.review_id == ReviewModel.id
+            ).where(
+                ReviewModel.owner_id == owner_id
+            )
+            result = await session.execute(query)
+            return result.scalar() or 0
 
 
 class ReviewStatusService(BaseService[ReviewStatusModel]):
